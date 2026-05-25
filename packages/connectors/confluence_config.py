@@ -14,6 +14,7 @@ class ConfluenceRuntimeConfig:
     auth_mode: str = "pat_bearer"
     username: str | None = None
     timeout_seconds: int = 30
+    ca_bundle_path: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> ConfluenceRuntimeConfig:
@@ -29,6 +30,7 @@ class ConfluenceRuntimeConfig:
             auth_mode=source.get("CONFLUENCE_AUTH_MODE", "pat_bearer"),
             username=source.get("CONFLUENCE_USERNAME"),
             timeout_seconds=int(source.get("CONFLUENCE_TIMEOUT_SECONDS", "30")),
+            ca_bundle_path=source.get("CONFLUENCE_CA_BUNDLE") or source.get("ATLASSIAN_CA_BUNDLE"),
         )
 
     def to_connector_config(self) -> ConnectorConfig:
@@ -38,4 +40,5 @@ class ConfluenceRuntimeConfig:
             auth_mode=self.auth_mode,
             username=self.username,
             timeout_seconds=self.timeout_seconds,
+            ca_bundle_path=self.ca_bundle_path,
         )

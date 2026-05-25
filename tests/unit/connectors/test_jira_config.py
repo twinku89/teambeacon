@@ -22,6 +22,7 @@ class JiraConfigUnitTests(unittest.TestCase):
                         "JIRA_STORY_POINTS_FIELD=customfield_10004",
                         "JIRA_EPIC_LINK_FIELD=customfield_10902",
                         "JIRA_SPRINT_FIELDS=customfield_10901,sprint",
+                        "JIRA_CA_BUNDLE=/tmp/corporate-ca.pem",
                     ]
                 ),
                 encoding="utf-8",
@@ -36,6 +37,7 @@ class JiraConfigUnitTests(unittest.TestCase):
                 "JIRA_STORY_POINTS_FIELD",
                 "JIRA_EPIC_LINK_FIELD",
                 "JIRA_SPRINT_FIELDS",
+                "JIRA_CA_BUNDLE",
             ):
                 os.environ.pop(key, None)
 
@@ -48,6 +50,7 @@ class JiraConfigUnitTests(unittest.TestCase):
             self.assertEqual(runtime.story_points_field, "customfield_10004")
             self.assertEqual(runtime.epic_link_field, "customfield_10902")
             self.assertEqual(runtime.sprint_field_candidates, ("customfield_10901", "sprint"))
+            self.assertEqual(runtime.ca_bundle_path, "/tmp/corporate-ca.pem")
 
     def test_from_env_requires_base_url_and_pat(self) -> None:
         with self.assertRaises(ValueError):

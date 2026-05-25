@@ -13,6 +13,7 @@ class ConfluenceConfigUnitTests(unittest.TestCase):
                 "CONFLUENCE_PAT": "token",
                 "CONFLUENCE_AUTH_MODE": "pat_bearer",
                 "CONFLUENCE_TIMEOUT_SECONDS": "45",
+                "CONFLUENCE_CA_BUNDLE": "/tmp/corporate-ca.pem",
             }
         )
 
@@ -20,6 +21,7 @@ class ConfluenceConfigUnitTests(unittest.TestCase):
         self.assertEqual(runtime.pat_token, "token")
         self.assertEqual(runtime.auth_mode, "pat_bearer")
         self.assertEqual(runtime.timeout_seconds, 45)
+        self.assertEqual(runtime.ca_bundle_path, "/tmp/corporate-ca.pem")
 
     def test_from_env_requires_base_url_and_pat(self) -> None:
         with self.assertRaises(ValueError):

@@ -149,11 +149,66 @@ describe("Content", () => {
         groups: [{ id: 1, name: "Core Platform" }],
         workTypes: [{ id: 2, name: "Feature" }],
       },
+      "/api/news/dashboard": {
+        source: "rss",
+        generatedAt: "2026-05-25T07:00:00+00:00",
+        timezone: "Australia/Melbourne",
+        categories: [
+          {
+            id: "world",
+            label: "World News",
+            description: "Global headlines to start the day.",
+            articles: [
+              {
+                id: "world-1",
+                categoryId: "world",
+                title: "World headline",
+                source: "BBC News",
+                url: "https://example.com/world",
+                publishedAt: "2026-05-25T06:30:00+00:00",
+                summary: "Global update.",
+              },
+            ],
+            errors: [],
+          },
+          {
+            id: "manchesterUnited",
+            label: "Manchester United",
+            description: "A dedicated United watchlist.",
+            articles: [],
+            errors: [],
+          },
+        ],
+        bookOfTheDay: {
+          label: "Book of the Day",
+          title: "Atomic Habits",
+          author: "James Clear",
+          summary: "A practical habit-building book.",
+          whyRead: "Useful for steady routines.",
+          readingTimeMinutes: 5,
+          detailedSummary: "A longer practical guide to habit systems.",
+          keyIdeas: ["Focus on systems, not only goals."],
+          tryToday: "Start with two minutes.",
+        },
+        trainingTip: {
+          categoryId: "dogTraining",
+          label: "Dog Training",
+          description: "Daily coaching for a reactive, overstimulated 9-month working-line German Shepherd.",
+          title: "Distance-first trigger work",
+          focus: "Keep him far enough from triggers that he can still think.",
+          steps: ["Reward calm check-ins.", "Move away before intensity builds."],
+          note: "Work with a qualified professional if reactions escalate.",
+        },
+        error: null,
+      },
     });
 
     render(<Content appName="TeamBeacon" />);
 
-    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Daily Briefing", level: 2 })).toBeInTheDocument();
+    expect(await screen.findByText("World headline")).toBeInTheDocument();
+    expect(screen.getByText("Atomic Habits")).toBeInTheDocument();
+    expect(screen.getByText("Distance-first trigger work")).toBeInTheDocument();
     expect(screen.getByText("Illuminating Engineering Insights")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Integrations Settings" })).not.toBeInTheDocument();
 
@@ -162,52 +217,37 @@ describe("Content", () => {
       .getAllByRole("button")
       .map((button) => button.querySelector(".tb-nav-title")?.textContent?.trim() ?? "");
     expect(orderedTitles).toEqual([
-      "Initiative Insights",
+      "Daily Briefing",
       "Sprint Insights",
       "Team Insights",
       "Security Insights",
       "Operations Insights",
       "Release Insights",
-      "Team Dashboard",
       "Settings",
     ]);
 
     expect(screen.getByLabelText("Security Insights is under construction")).toBeInTheDocument();
     expect(screen.getByLabelText("Operations Insights is under construction")).toBeInTheDocument();
 
-    expect(screen.getByText("Epic Config / Progress / RAG")).toBeInTheDocument();
+    expect(screen.getByText("World / AU / India / Books / Dog Training")).toBeInTheDocument();
     expect(screen.getByText("Overview / Progress / Scope Creep / Blockers")).toBeInTheDocument();
     expect(screen.getByText("Sprint Trend / Cycle Time")).toBeInTheDocument();
     expect(screen.getByText("Scan / Vulnerability Posture")).toBeInTheDocument();
     expect(screen.getByText("Incidents / DR / Observability")).toBeInTheDocument();
     expect(screen.getByText("Cycle Time / Readiness / Risk")).toBeInTheDocument();
-    expect(screen.getByText("Summary / Wins / Risks / Progress / Work Mix")).toBeInTheDocument();
     expect(screen.getByText("Connections / Metadata Configuration")).toBeInTheDocument();
 
-    expect(screen.queryByLabelText("Team Dashboard is under construction")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Initiative Insights/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Team Dashboard/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Epic Config / Progress / RAG")).not.toBeInTheDocument();
+    expect(screen.queryByText("Summary / Wins / Risks / Progress / Work Mix")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Daily Briefing is under construction")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Team Insights is under construction")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Settings is under construction")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Initiative Insights is under construction")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Sprint Insights is under construction")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Release Insights is under construction")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Individual Insights/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Team Insights Settings" })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Initiative Insights/ }));
-    expect(await screen.findByRole("heading", { name: "Initiative Insights" })).toBeInTheDocument();
-    expect(await screen.findByText("CEG-101")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Configure Epic" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
-    const initiativeReportingButton = screen.getByRole("button", { name: "Reporting Period" });
-    const initiativeConfigureButton = screen.getByRole("button", { name: "Configure Initiative" });
-    fireEvent.click(initiativeReportingButton);
-    expect(await screen.findByRole("dialog", { name: "Configure Reporting Period" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("dialog", { name: "Configure Reporting Period" })).not.toBeInTheDocument();
-    fireEvent.click(initiativeConfigureButton);
-    expect(await screen.findByRole("dialog", { name: "Configure Epic Metadata" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.queryByRole("dialog", { name: "Configure Epic Metadata" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Team Insights/ }));
     expect(await screen.findByRole("heading", { name: "Team Insights" })).toBeInTheDocument();

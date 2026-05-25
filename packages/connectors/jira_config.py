@@ -44,6 +44,7 @@ class JiraRuntimeConfig:
     auth_mode: str = "pat_bearer"
     username: str | None = None
     timeout_seconds: int = 30
+    ca_bundle_path: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> JiraRuntimeConfig:
@@ -80,6 +81,7 @@ class JiraRuntimeConfig:
             auth_mode=source.get("JIRA_AUTH_MODE", "pat_bearer"),
             username=source.get("JIRA_USERNAME"),
             timeout_seconds=timeout_seconds,
+            ca_bundle_path=source.get("JIRA_CA_BUNDLE") or source.get("ATLASSIAN_CA_BUNDLE"),
         )
 
     def to_connector_config(self) -> ConnectorConfig:
@@ -89,4 +91,5 @@ class JiraRuntimeConfig:
             auth_mode=self.auth_mode,
             username=self.username,
             timeout_seconds=self.timeout_seconds,
+            ca_bundle_path=self.ca_bundle_path,
         )

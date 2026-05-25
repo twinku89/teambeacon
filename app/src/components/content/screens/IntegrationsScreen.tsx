@@ -11,9 +11,11 @@ import {
   fetchAiIntegrationStatus,
   fetchConfluenceIntegrationStatus,
   fetchEpicLookupConfig,
+  fetchJenkinsIntegrationStatus,
   fetchJiraIntegrationStatus,
   fetchJiraSyncHistory,
   fetchJiraSyncStatus,
+  JenkinsIntegrationStatus,
   JiraIntegrationStatus,
   JiraSyncHistoryEntry,
   JiraSyncMode,
@@ -108,12 +110,14 @@ export function IntegrationsScreen() {
   const [jiraStatus, setJiraStatus] = useState<JiraIntegrationStatus | null>(null);
   const [aiStatus, setAiStatus] = useState<AiIntegrationStatus | null>(null);
   const [confluenceStatus, setConfluenceStatus] = useState<ConfluenceIntegrationStatus | null>(null);
+  const [jenkinsStatus, setJenkinsStatus] = useState<JenkinsIntegrationStatus | null>(null);
   const [jiraSyncStatus, setJiraSyncStatus] = useState<JiraSyncStatus | null>(null);
   const [jiraSyncHistory, setJiraSyncHistory] = useState<JiraSyncHistoryEntry[]>([]);
 
   const [jiraError, setJiraError] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [confluenceError, setConfluenceError] = useState<string | null>(null);
+  const [jenkinsError, setJenkinsError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [metaError, setMetaError] = useState<string | null>(null);
@@ -122,6 +126,7 @@ export function IntegrationsScreen() {
   const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(true);
   const [confluenceLoading, setConfluenceLoading] = useState(true);
+  const [jenkinsLoading, setJenkinsLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -185,6 +190,21 @@ export function IntegrationsScreen() {
     }
   }, []);
 
+  const loadJenkinsStatus = useCallback(async () => {
+    setJenkinsLoading(true);
+    setJenkinsError(null);
+    try {
+      const status = await fetchJenkinsIntegrationStatus();
+      setJenkinsStatus(status);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown Jenkins status failure.";
+      setJenkinsError(message);
+      setJenkinsStatus(null);
+    } finally {
+      setJenkinsLoading(false);
+    }
+  }, []);
+
   const loadJiraSyncStatus = useCallback(async () => {
     try {
       const status = await fetchJiraSyncStatus();
@@ -234,7 +254,10 @@ export function IntegrationsScreen() {
     loadConfluenceStatus().catch(() => {
       // loadConfluenceStatus updates local state.
     });
-  }, [loadAiStatus, loadConfluenceStatus, loadJiraStatus]);
+    loadJenkinsStatus().catch(() => {
+      // loadJenkinsStatus updates local state.
+    });
+  }, [loadAiStatus, loadConfluenceStatus, loadJenkinsStatus, loadJiraStatus]);
 
   const triggerJiraSync = useCallback(async (mode: JiraSyncMode, sinceDate?: string) => {
     setSyncError(null);
@@ -259,13 +282,16 @@ export function IntegrationsScreen() {
     loadConfluenceStatus().catch(() => {
       // loadConfluenceStatus updates local state.
     });
+    loadJenkinsStatus().catch(() => {
+      // loadJenkinsStatus updates local state.
+    });
     loadJiraSyncStatus().catch(() => {
       // loadJiraSyncStatus updates local state.
     });
     loadEpicMetadataConfig().catch(() => {
       // loadEpicMetadataConfig updates local state.
     });
-  }, [loadAiStatus, loadConfluenceStatus, loadEpicMetadataConfig, loadJiraStatus, loadJiraSyncStatus]);
+  }, [loadAiStatus, loadConfluenceStatus, loadEpicMetadataConfig, loadJenkinsStatus, loadJiraStatus, loadJiraSyncStatus]);
 
   useEffect(() => {
     if (jiraSyncStatus?.state !== "running") {
@@ -499,11 +525,22 @@ export function IntegrationsScreen() {
     return confluenceStatus?.connected ? "Connected" : "Check Required";
   }, [confluenceError, confluenceLoading, confluenceStatus]);
 
+  const jenkinsValue = useMemo(() => {
+    if (jenkinsError) return "Unavailable";
+    if (jenkinsLoading) return "Checking...";
+    return jenkinsStatus?.connected ? "Connected" : "Check Required";
+  }, [jenkinsError, jenkinsLoading, jenkinsStatus]);
+
   const jiraToneClass = jiraError ? "tb-value-risk" : jiraStatus?.connected ? "tb-value-good" : "tb-value-warn";
   const aiToneClass = aiError ? "tb-value-risk" : aiStatus?.connected ? "tb-value-good" : "tb-value-warn";
   const confluenceToneClass = confluenceError
     ? "tb-value-risk"
     : confluenceStatus?.connected
+      ? "tb-value-good"
+      : "tb-value-warn";
+  const jenkinsToneClass = jenkinsError
+    ? "tb-value-risk"
+    : jenkinsStatus?.connected
       ? "tb-value-good"
       : "tb-value-warn";
 
@@ -545,6 +582,14 @@ export function IntegrationsScreen() {
     if (confluenceStatus.error) return confluenceStatus.error;
     return checksSummary(confluenceStatus.checks);
   }, [confluenceError, confluenceLoading, confluenceStatus]);
+
+  const jenkinsHint = useMemo(() => {
+    if (jenkinsError) return jenkinsError;
+    if (jenkinsLoading) return "Testing Jenkins job API reachability and API token access.";
+    if (!jenkinsStatus) return "Status not loaded.";
+    if (jenkinsStatus.error) return jenkinsStatus.error;
+    return checksSummary(jenkinsStatus.checks);
+  }, [jenkinsError, jenkinsLoading, jenkinsStatus]);
 
   const jiraSyncToneClass = useMemo(() => {
     if (syncError) return "is-risk";
@@ -635,10 +680,10 @@ export function IntegrationsScreen() {
             <p class="tb-muted-note">Live connectivity checks from frontend to TeamBeacon backend integrations.</p>
           </div>
           <button type="button" class="tb-btn tb-btn-primary" onClick={checkSourceConnections}>
-            {loading || aiLoading || confluenceLoading ? "Checking..." : "Check Now"}
+            {loading || aiLoading || confluenceLoading || jenkinsLoading ? "Checking..." : "Check Now"}
           </button>
         </header>
-        <div class="tb-metrics-grid tb-three-up">
+        <div class="tb-metrics-grid tb-four-up">
           <article class="tb-metric-card">
             <h4>JIRA Connection</h4>
             <strong class={`tb-value ${jiraToneClass}`}>{jiraValue}</strong>
@@ -705,6 +750,15 @@ export function IntegrationsScreen() {
             <strong class={`tb-value ${confluenceToneClass}`}>{confluenceValue}</strong>
             <p>{confluenceHint}</p>
             <p>Last checked: {formatCheckedAt(confluenceStatus?.checkedAt)}</p>
+          </article>
+
+          <article class="tb-metric-card">
+            <h4>Jenkins Connection</h4>
+            <strong class={`tb-value ${jenkinsToneClass}`}>{jenkinsValue}</strong>
+            <p>{jenkinsHint}</p>
+            <p>Last checked: {formatCheckedAt(jenkinsStatus?.checkedAt)}</p>
+            <p>Job: {jenkinsStatus?.metrics?.jobName ?? "n/a"}</p>
+            <p>Last build: {jenkinsStatus?.metrics?.lastBuildNumber ?? "n/a"}</p>
           </article>
 
           <article class="tb-metric-card">

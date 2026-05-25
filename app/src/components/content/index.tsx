@@ -7,19 +7,9 @@
  */
 import { h } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import {
-  OPEN_INITIATIVES_CONFIGURE_EVENT,
-  OPEN_INITIATIVES_REPORTING_PERIOD_EVENT,
-  InitiativesScreen,
-} from "./screens/InitiativesScreen";
-import {
-  EXPORT_TEAM_DASHBOARD_HTML_EVENT,
-  OPEN_TEAM_DASHBOARD_INITIATIVE_CONFIG_EVENT,
-  OPEN_TEAM_DASHBOARD_REPORTING_PERIOD_EVENT,
-  TeamDashboardScreen,
-} from "./screens/TeamDashboardScreen";
 import { IncidentResponseScreen } from "./screens/IncidentResponseScreen";
 import { IntegrationsScreen } from "./screens/IntegrationsScreen";
+import { NewsDashboardScreen } from "./screens/NewsDashboardScreen";
 import { ReleasesScreen } from "./screens/ReleasesScreen";
 import { SecurityScreen } from "./screens/SecurityScreen";
 import { SprintBoardScreen } from "./screens/SprintBoardScreen";
@@ -35,13 +25,12 @@ import {
 
 type ScreenId =
   | "integrations"
-  | "initiatives"
+  | "news"
   | "team"
   | "sprint"
   | "security"
   | "incidents"
-  | "releases"
-  | "executive";
+  | "releases";
 
 type NavItem = {
   id: ScreenId;
@@ -55,26 +44,24 @@ type Props = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "initiatives", label: "Initiative Insights", blurb: "Epic Config / Progress / RAG", showConstruction: false },
+  { id: "news", label: "Daily Briefing", blurb: "World / AU / India / Books / Dog Training", showConstruction: false },
   { id: "sprint", label: "Sprint Insights", blurb: "Overview / Progress / Scope Creep / Blockers", showConstruction: false },
   { id: "team", label: "Team Insights", blurb: "Sprint Trend / Cycle Time", showConstruction: false },
   { id: "security", label: "Security Insights", blurb: "Scan / Vulnerability Posture", showConstruction: true },
   { id: "incidents", label: "Operations Insights", blurb: "Incidents / DR / Observability", showConstruction: true },
   { id: "releases", label: "Release Insights", blurb: "Cycle Time / Readiness / Risk", showConstruction: false },
-  { id: "executive", label: "Team Dashboard", blurb: "Summary / Wins / Risks / Progress / Work Mix", showConstruction: false },
   { id: "integrations", label: "Settings", blurb: "Connections / Metadata Configuration", showConstruction: false },
 ];
 
 function screenTitle(id: ScreenId): string {
   const mapping: Record<ScreenId, string> = {
     integrations: "Settings",
-    initiatives: "Initiative Insights",
+    news: "Daily Briefing",
     team: "Team Insights",
     sprint: "Sprint Insights",
     security: "Security Insights",
     incidents: "Operations Insights",
     releases: "Release Insights",
-    executive: "Team Dashboard",
   };
   return mapping[id];
 }
@@ -83,8 +70,8 @@ function renderScreen(id: ScreenId) {
   switch (id) {
     case "integrations":
       return <IntegrationsScreen />;
-    case "initiatives":
-      return <InitiativesScreen />;
+    case "news":
+      return <NewsDashboardScreen />;
     case "team":
       return <TeamInsightsScreen />;
     case "sprint":
@@ -95,8 +82,6 @@ function renderScreen(id: ScreenId) {
       return <IncidentResponseScreen />;
     case "releases":
       return <ReleasesScreen />;
-    case "executive":
-      return <TeamDashboardScreen />;
     default:
       return <IntegrationsScreen />;
   }
@@ -277,7 +262,7 @@ function TrendWindowDropdown({ value, onChange }: TrendWindowDropdownProps) {
 }
 
 export function Content({ appName }: Props) {
-  const [active, setActive] = useState<ScreenId>("integrations");
+  const [active, setActive] = useState<ScreenId>("news");
   const [teamTrendWindowSelection, setTeamTrendWindowSelection] = useState<number>(12);
   const heading = useMemo(() => screenTitle(active), [active]);
 
@@ -308,7 +293,7 @@ export function Content({ appName }: Props) {
           <div class="tb-brand-mark" aria-hidden="true">TB</div>
           <div>
             <p class="tb-eyebrow">{appName}</p>
-            <h1>Manager Console</h1>
+            <h1>DevOps Console</h1>
             <small>Illuminating Engineering Insights</small>
           </div>
         </div>
@@ -341,24 +326,6 @@ export function Content({ appName }: Props) {
       <main class="tb-main">
         <header class="tb-topbar">
           <h2>{heading}</h2>
-          {active === "initiatives" ? (
-            <div class="tb-topbar-actions">
-              <button
-                type="button"
-                class="tb-btn tb-btn-sm tb-no-print"
-                onClick={() => window.dispatchEvent(new CustomEvent(OPEN_INITIATIVES_REPORTING_PERIOD_EVENT))}
-              >
-                Reporting Period
-              </button>
-              <button
-                type="button"
-                class="tb-btn tb-btn-sm tb-no-print"
-                onClick={() => window.dispatchEvent(new CustomEvent(OPEN_INITIATIVES_CONFIGURE_EVENT))}
-              >
-                Configure Initiative
-              </button>
-            </div>
-          ) : null}
           {active === "team" ? (
             <div class="tb-topbar-actions">
               <TrendWindowDropdown
@@ -372,31 +339,6 @@ export function Content({ appName }: Props) {
                 onClick={() => window.dispatchEvent(new CustomEvent(OPEN_TEAM_INSIGHTS_SETTINGS_EVENT))}
               >
                 Settings
-              </button>
-            </div>
-          ) : null}
-          {active === "executive" ? (
-            <div class="tb-topbar-actions">
-              <button
-                type="button"
-                class="tb-btn tb-btn-sm tb-no-print"
-                onClick={() => window.dispatchEvent(new CustomEvent(OPEN_TEAM_DASHBOARD_REPORTING_PERIOD_EVENT))}
-              >
-                Reporting Period
-              </button>
-              <button
-                type="button"
-                class="tb-btn tb-btn-sm tb-no-print"
-                onClick={() => window.dispatchEvent(new CustomEvent(OPEN_TEAM_DASHBOARD_INITIATIVE_CONFIG_EVENT))}
-              >
-                Configure Initiatives
-              </button>
-              <button
-                type="button"
-                class="tb-btn tb-btn-sm tb-no-print"
-                onClick={() => window.dispatchEvent(new CustomEvent(EXPORT_TEAM_DASHBOARD_HTML_EVENT))}
-              >
-                Export Dashboard
               </button>
             </div>
           ) : null}

@@ -19,6 +19,7 @@ from .models import (
     SprintRecord,
     SyncBatch,
 )
+from .tls import create_ssl_context
 
 DEFAULT_STORY_POINTS_FIELD = "customfield_10016"
 DEFAULT_EPIC_LINK_FIELD = "customfield_10014"
@@ -129,8 +130,9 @@ class JiraRestConnector(JiraConnector):
         url = self._build_url(path, params)
         headers = {"Accept": "application/json", **self._auth_headers()}
         request = Request(url=url, headers=headers, method="GET")
+        ssl_context = create_ssl_context(self.config.ca_bundle_path)
         try:
-            with urlopen(request, timeout=self.config.timeout_seconds) as response:
+            with urlopen(request, timeout=self.config.timeout_seconds, context=ssl_context) as response:
                 raw = response.read().decode("utf-8")
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")

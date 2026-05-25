@@ -34,6 +34,10 @@ python3 -m services.api.server --host 0.0.0.0 --port 8000 --web-dir app/web
   - Validates Confluence REST reachability with PAT/basic auth:
     - `/rest/api/space?limit=1` query
     - Required Confluence environment variables
+- `GET /api/integrations/jenkins/status`
+  - Validates Jenkins job REST reachability with API-token basic auth:
+    - Configured release pipeline job endpoint
+    - Required Jenkins environment variables
 - `GET /api/releases/insights?releaseLimit=12`
   - Returns release analytics from local sync data:
     - release cycle-time trend from release start date to release date
@@ -43,6 +47,11 @@ python3 -m services.api.server --host 0.0.0.0 --port 8000 --web-dir app/web
   - Returns current Release Insights refresh state.
 - `GET /api/releases/refresh/result`
   - Returns the latest Release Insights summary payload.
+- `GET /api/security/audit`
+  - Returns latest Jenkins security audit pipeline stages and vulnerability findings:
+    - Backend dependency audit findings from Jenkins test reports
+    - Trivy container/image findings from archived JSON reports
+    - Frontend and UI stage status from Jenkins workflow metadata
 - `POST /api/releases/refresh/start`
   - Body:
     - `sources` (required array; each source supports `confluenceUrl` and optional `prompt`)

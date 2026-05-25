@@ -15,6 +15,7 @@
 - `JIRA_EPIC_LINK_FIELD` (default: `customfield_10014`; set to your environment value, e.g. `customfield_10902`)
 - `JIRA_SPRINT_FIELDS` (comma-separated sprint field priority; default: `sprint,customfield_10901,customfield_10020`)
 - `JIRA_AUTH_MODE` (`pat_bearer` default, `basic` also supported)
+- `JIRA_CA_BUNDLE` or `ATLASSIAN_CA_BUNDLE` (optional PEM file for internal/corporate TLS CAs)
 - `JIRA_USERNAME` (only needed for `basic` auth mode)
 - `JIRA_TIMEOUT_SECONDS` (default: `30`)
 - `RUN_LIVE_JIRA_TESTS` (`1` enables live integration tests)
@@ -23,8 +24,17 @@
 - `CONFLUENCE_BASE_URL` (required)
 - `CONFLUENCE_PAT` (required)
 - `CONFLUENCE_AUTH_MODE` (`pat_bearer` default, `basic` also supported)
+- `CONFLUENCE_CA_BUNDLE` or `ATLASSIAN_CA_BUNDLE` (optional PEM file for internal/corporate TLS CAs)
 - `CONFLUENCE_USERNAME` (only needed for `basic` auth mode)
 - `CONFLUENCE_TIMEOUT_SECONDS` (default: `30`)
+
+## Jenkins Variables
+- `JENKINS_RELEASE_PIPELINE_URL` (required; Jenkins job URL checked by Settings)
+- `JENKINS_SECURITY_AUDIT_PIPELINE_URL` (optional; Security Insights pipeline URL)
+- `JENKINS_API_AUTH_USER` (required)
+- `JENKINS_API_AUTH_TOKEN` (required)
+- `JENKINS_CA_BUNDLE` or `ATLASSIAN_CA_BUNDLE` (optional PEM file for internal/corporate TLS CAs)
+- `JENKINS_TIMEOUT_SECONDS` (default: `30`)
 
 ## Intelligence Provider
 - `INTELLIGENCE_PROVIDER` (default: `ollama`; supported: `oci`, `ollama`, `openai`)

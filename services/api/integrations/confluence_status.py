@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 from packages.connectors.confluence_config import ConfluenceRuntimeConfig
 from packages.connectors.jira_config import load_env_files
+from packages.connectors.tls import create_ssl_context
 
 
 def _utc_iso_now() -> str:
@@ -116,13 +117,14 @@ def get_confluence_status() -> dict[str, Any]:
         return base_payload
 
     current_user_url = _build_current_user_url(runtime.base_url)
+    ssl_context = create_ssl_context(getattr(runtime, "ca_bundle_path", None))
     try:
         request = Request(
             url=current_user_url,
             headers={"Accept": "application/json", **auth_headers},
             method="GET",
         )
-        with urlopen(request, timeout=runtime.timeout_seconds) as response:  # noqa: S310
+        with urlopen(request, timeout=runtime.timeout_seconds, context=ssl_context) as response:  # noqa: S310
             current_user_raw = response.read().decode("utf-8")
     except HTTPError as exc:
         detail = f"Confluence current user request failed with HTTP {exc.code}."
@@ -180,7 +182,7 @@ def get_confluence_status() -> dict[str, Any]:
                 headers={"Accept": "application/json", **auth_headers},
                 method="GET",
             )
-            with urlopen(request, timeout=runtime.timeout_seconds) as response:  # noqa: S310
+            with urlopen(request, timeout=runtime.timeout_seconds, context=ssl_context) as response:  # noqa: S310
                 forced_auth_raw = response.read().decode("utf-8")
         except HTTPError as exc:
             detail = (
@@ -268,7 +270,7 @@ def get_confluence_status() -> dict[str, Any]:
             headers={"Accept": "application/json", **auth_headers},
             method="GET",
         )
-        with urlopen(request, timeout=runtime.timeout_seconds) as response:  # noqa: S310
+        with urlopen(request, timeout=runtime.timeout_seconds, context=ssl_context) as response:  # noqa: S310
             space_query_raw = response.read().decode("utf-8")
     except HTTPError as exc:
         detail = f"Confluence space query failed with HTTP {exc.code}."

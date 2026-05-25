@@ -94,6 +94,27 @@ export type ConfluenceIntegrationStatus = {
   error?: string | null;
 };
 
+export type JenkinsIntegrationStatus = {
+  source: "jenkins";
+  connected: boolean;
+  checkedAt: string;
+  config: {
+    jobUrl?: string;
+    resolvedJobUrl?: string;
+    authUser?: string;
+    timeoutSeconds?: number;
+  };
+  checks: IntegrationCheck[];
+  metrics?: {
+    jobName?: string | null;
+    buildable?: boolean | null;
+    lastBuildNumber?: number | null;
+    lastBuildResult?: string | null;
+    lastSuccessfulBuildNumber?: number | null;
+  };
+  error?: string | null;
+};
+
 export type OciGenAiChatResponse = {
   source: "oci_genai" | "ollama" | "openai";
   provider?: AiProvider;
@@ -115,6 +136,137 @@ export type OciGenAiChatResponse = {
 
 export type JiraSyncState = "idle" | "running" | "completed" | "failed";
 export type JiraSyncMode = "full" | "since_last" | "since_date";
+
+export type SecuritySeverityCounts = {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+};
+
+export type SecurityAuditLayer = {
+  name: string;
+  stageStatus: string;
+  durationMillis?: number | null;
+  findingCount: number;
+  failedFindingCount: number;
+  skippedFindingCount: number;
+  severityCounts: SecuritySeverityCounts;
+};
+
+export type SecurityAuditFinding = {
+  layer: string;
+  id?: string | null;
+  severity: string;
+  packageName?: string | null;
+  installedVersion?: string | null;
+  fixedVersion?: string | null;
+  target?: string | null;
+  title?: string | null;
+  status?: string | null;
+  score?: number | null;
+  jiraCard?: {
+    issueKey: string;
+    summary: string;
+    status: string;
+    statusCategory?: string | null;
+    issueUrl?: string | null;
+    assignee?: string | null;
+    latestCommentAt?: string | null;
+  } | null;
+  jiraCreateUrl?: string | null;
+};
+
+export type SecurityAuditTrendPoint = {
+  buildNumber?: number | string | null;
+  buildUrl?: string | null;
+  status?: string | null;
+  startedAt?: string | null;
+  totalFindings: number;
+  severityCounts: SecuritySeverityCounts;
+};
+
+export type SecurityAuditResponse = {
+  source: "jenkins_security_audit";
+  generatedAt: string;
+  cached?: boolean;
+  pipeline: {
+    jobName?: string | null;
+    jobUrl?: string | null;
+    buildNumber?: number | string | null;
+    buildUrl?: string | null;
+    status?: string | null;
+    startedAt?: string | null;
+    durationMillis?: number | null;
+    trivyArtifactName?: string | null;
+  };
+  summary: {
+    totalFindings?: number;
+    failedFindings?: number;
+    skippedFindings?: number;
+    severityCounts?: SecuritySeverityCounts;
+    failedLayerCount?: number;
+    passedLayerCount?: number;
+    failedLayers?: string[];
+    passedLayers?: string[];
+  };
+  layers: SecurityAuditLayer[];
+  findings: SecurityAuditFinding[];
+  trend?: SecurityAuditTrendPoint[];
+  error?: string | null;
+};
+
+export type NewsArticle = {
+  id: string;
+  categoryId: string;
+  title: string;
+  source: string;
+  url: string;
+  publishedAt?: string | null;
+  summary?: string | null;
+};
+
+export type NewsCategory = {
+  id: string;
+  label: string;
+  description: string;
+  articles: NewsArticle[];
+  errors?: string[];
+};
+
+export type DogTrainingTip = {
+  categoryId: "dogTraining";
+  label: string;
+  description: string;
+  title: string;
+  focus: string;
+  steps: string[];
+  note?: string | null;
+};
+
+export type BookOfTheDay = {
+  label: string;
+  title: string;
+  author: string;
+  summary: string;
+  whyRead: string;
+  readingTimeMinutes?: number;
+  detailedSummary?: string;
+  keyIdeas?: string[];
+  tryToday?: string;
+};
+
+export type NewsDashboardResponse = {
+  source: "rss";
+  generatedAt: string;
+  timezone: string;
+  cached?: boolean;
+  categories: NewsCategory[];
+  bookOfTheDay?: BookOfTheDay;
+  trainingTip: DogTrainingTip;
+  error?: string | null;
+};
 
 export type JiraSyncStatus = {
   source: "jira";
@@ -670,6 +822,17 @@ export async function fetchConfluenceIntegrationStatus(): Promise<ConfluenceInte
   return (await response.json()) as ConfluenceIntegrationStatus;
 }
 
+export async function fetchJenkinsIntegrationStatus(): Promise<JenkinsIntegrationStatus> {
+  const response = await fetch(`${API_BASE}/api/integrations/jenkins/status`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw await parseError(response, `Jenkins status request failed (${response.status})`);
+  }
+  return (await response.json()) as JenkinsIntegrationStatus;
+}
+
 export async function chatWithOciGenAi(payload: {
   message: string;
   provider?: AiProvider;
@@ -728,6 +891,28 @@ export async function fetchJiraSyncHistory(limit = 20): Promise<JiraSyncHistoryE
   }
   const payload = (await response.json()) as { source: string; history?: JiraSyncHistoryEntry[] };
   return payload.history ?? [];
+}
+
+export async function fetchSecurityAudit(): Promise<SecurityAuditResponse> {
+  const response = await fetch(`${API_BASE}/api/security/audit`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw await parseError(response, `Security audit request failed (${response.status})`);
+  }
+  return (await response.json()) as SecurityAuditResponse;
+}
+
+export async function fetchNewsDashboard(): Promise<NewsDashboardResponse> {
+  const response = await fetch(`${API_BASE}/api/news/dashboard`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw await parseError(response, `News dashboard request failed (${response.status})`);
+  }
+  return (await response.json()) as NewsDashboardResponse;
 }
 
 export async function fetchConfiguredEpicSummary(

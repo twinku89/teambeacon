@@ -16,6 +16,7 @@ from services.api.issues.query import search_synced_issues
 from services.api.issues.release_insights import get_release_insights
 from services.api.issues.team_insights import get_team_insights
 from services.api.integrations.confluence_status import get_confluence_status
+from services.api.integrations.jenkins_status import get_jenkins_status
 from services.api.integrations.jira_status import get_jira_status
 from services.api.integrations.jira_sync import (
     get_jira_sync_history,
@@ -29,6 +30,7 @@ from services.api.integrations.release_refresh import (
     get_release_refresh_status,
     start_release_refresh,
 )
+from services.api.integrations.security_audit import get_security_audit
 from services.api.metadata.epic_config import (
     add_epic_group,
     add_work_type,
@@ -45,6 +47,7 @@ from services.api.metadata.epic_config import (
     update_work_type,
     upsert_epic_metadata,
 )
+from services.api.news_dashboard import get_news_dashboard
 
 
 StatusProvider = Callable[[], dict[str, Any]]
@@ -67,12 +70,15 @@ MetadataEpicUpsertProvider = Callable[..., dict[str, Any]]
 MetadataEpicDeleteProvider = Callable[[str], dict[str, Any]]
 MetadataEpicCompletedCardsProvider = Callable[..., dict[str, Any]]
 ConfluenceStatusProvider = Callable[[], dict[str, Any]]
+JenkinsStatusProvider = Callable[[], dict[str, Any]]
 AiStatusProvider = Callable[..., dict[str, Any]]
 AiChatProvider = Callable[..., dict[str, Any]]
 OciGenAiStatusProvider = Callable[[], dict[str, Any]]
 ReleaseRefreshStatusProvider = Callable[[], dict[str, Any]]
 ReleaseRefreshStartProvider = Callable[[Optional[list[dict[str, Any]]], Optional[str]], dict[str, Any]]
 ReleaseRefreshResultProvider = Callable[[], dict[str, Any]]
+SecurityAuditProvider = Callable[[], dict[str, Any]]
+NewsDashboardProvider = Callable[[], dict[str, Any]]
 
 
 def _json_bytes(payload: dict[str, Any]) -> bytes:
@@ -182,6 +188,7 @@ def _build_openapi_spec(server_url: str) -> dict[str, Any]:
             {"name": "integrations", "description": "Integration status and sync controls."},
             {"name": "issues", "description": "Issue and sprint-level views."},
             {"name": "metadata", "description": "Epic metadata and lookup configuration."},
+            {"name": "news", "description": "Daily news dashboard feeds."},
             {"name": "ai", "description": "Provider-agnostic AI status and chat utilities."},
             {"name": "docs", "description": "OpenAPI and Swagger UI docs endpoints."},
         ],
@@ -277,6 +284,13 @@ def _build_openapi_spec(server_url: str) -> dict[str, Any]:
                     "responses": {"200": {"description": "Confluence status", "content": json_payload}},
                 }
             },
+            "/api/integrations/jenkins/status": {
+                "get": {
+                    "tags": ["integrations"],
+                    "summary": "Jenkins integration status",
+                    "responses": {"200": {"description": "Jenkins status", "content": json_payload}},
+                }
+            },
             "/api/releases/refresh/status": {
                 "get": {
                     "tags": ["integrations"],
@@ -335,6 +349,20 @@ def _build_openapi_spec(server_url: str) -> dict[str, Any]:
                         "202": {"description": "Refresh started", "content": json_payload},
                         "400": error_payload,
                     },
+                }
+            },
+            "/api/security/audit": {
+                "get": {
+                    "tags": ["integrations"],
+                    "summary": "Security audit pipeline findings",
+                    "responses": {"200": {"description": "Security audit findings", "content": json_payload}},
+                }
+            },
+            "/api/news/dashboard": {
+                "get": {
+                    "tags": ["news"],
+                    "summary": "Daily news dashboard",
+                    "responses": {"200": {"description": "Latest news grouped by category", "content": json_payload}},
                 }
             },
             "/api/integrations/oci-genai/status": {
@@ -722,12 +750,15 @@ def build_handler(
     metadata_upsert_epic_provider: MetadataEpicUpsertProvider = upsert_epic_metadata,
     metadata_delete_epic_provider: MetadataEpicDeleteProvider = delete_epic_metadata,
     confluence_status_provider: ConfluenceStatusProvider = get_confluence_status,
+    jenkins_status_provider: JenkinsStatusProvider = get_jenkins_status,
     ai_status_provider: AiStatusProvider = get_intelligence_status,
     ai_chat_provider: AiChatProvider = chat_with_intelligence,
     oci_genai_status_provider: OciGenAiStatusProvider = get_oci_genai_status,
     release_refresh_status_provider: ReleaseRefreshStatusProvider = get_release_refresh_status,
     release_refresh_result_provider: ReleaseRefreshResultProvider = get_release_refresh_result,
     release_refresh_start_provider: ReleaseRefreshStartProvider = start_release_refresh,
+    security_audit_provider: SecurityAuditProvider = get_security_audit,
+    news_dashboard_provider: NewsDashboardProvider = get_news_dashboard,
     web_dir: str | Path | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     web_root = Path(web_dir).expanduser().resolve() if web_dir is not None else None
@@ -818,6 +849,12 @@ def build_handler(
                 self.wfile.write(_json_bytes(payload))
                 return
 
+            if path == "/api/integrations/jenkins/status":
+                payload = jenkins_status_provider()
+                self._set_json_headers(200)
+                self.wfile.write(_json_bytes(payload))
+                return
+
             if path == "/api/releases/refresh/status":
                 payload = release_refresh_status_provider()
                 self._set_json_headers(200)
@@ -826,6 +863,18 @@ def build_handler(
 
             if path == "/api/releases/refresh/result":
                 payload = release_refresh_result_provider()
+                self._set_json_headers(200)
+                self.wfile.write(_json_bytes(payload))
+                return
+
+            if path == "/api/security/audit":
+                payload = security_audit_provider()
+                self._set_json_headers(200)
+                self.wfile.write(_json_bytes(payload))
+                return
+
+            if path == "/api/news/dashboard":
+                payload = news_dashboard_provider()
                 self._set_json_headers(200)
                 self.wfile.write(_json_bytes(payload))
                 return

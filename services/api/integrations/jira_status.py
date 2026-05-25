@@ -29,6 +29,24 @@ def _build_project_url(base_url: str, project_key: str | None) -> str | None:
     return f"{base_url.rstrip('/')}/projects/{project_key}"
 
 
+def _format_jira_error(error: Exception, runtime: JiraRuntimeConfig) -> str:
+    detail = str(error)
+    if "CERTIFICATE_VERIFY_FAILED" not in detail:
+        return detail
+
+    if runtime.ca_bundle_path:
+        return (
+            f"{detail}. Python could not validate the Jira TLS certificate using "
+            f"the configured CA bundle at {runtime.ca_bundle_path}."
+        )
+
+    return (
+        f"{detail}. Python does not trust Jira's TLS certificate chain. "
+        "Set JIRA_CA_BUNDLE or ATLASSIAN_CA_BUNDLE in config/.env to a PEM file "
+        "containing your corporate/internal CA certificate chain, then restart the API."
+    )
+
+
 def get_jira_status() -> dict[str, Any]:
     load_env_files()
     base_payload: dict[str, Any] = {
@@ -112,7 +130,7 @@ def get_jira_status() -> dict[str, Any]:
                     "detail": f"Board {runtime.board_id} is not accessible ({exc.status_code or 'n/a'}).",
                 }
             )
-            errors.append(str(exc))
+            errors.append(_format_jira_error(exc, runtime))
         except Exception as exc:  # noqa: BLE001
             configured_board = {
                 "id": runtime.board_id,
@@ -127,7 +145,7 @@ def get_jira_status() -> dict[str, Any]:
                     "detail": f"Unexpected failure while checking board {runtime.board_id}.",
                 }
             )
-            errors.append(str(exc))
+            errors.append(_format_jira_error(exc, runtime))
     else:
         checks.append(
             {
@@ -165,7 +183,7 @@ def get_jira_status() -> dict[str, Any]:
                     "detail": f"Project query failed for {runtime.project_key} ({exc.status_code or 'n/a'}).",
                 }
             )
-            errors.append(str(exc))
+            errors.append(_format_jira_error(exc, runtime))
         except Exception as exc:  # noqa: BLE001
             checks.append(
                 {
@@ -174,7 +192,7 @@ def get_jira_status() -> dict[str, Any]:
                     "detail": f"Unexpected failure while querying project {runtime.project_key}.",
                 }
             )
-            errors.append(str(exc))
+            errors.append(_format_jira_error(exc, runtime))
     else:
         checks.append(
             {

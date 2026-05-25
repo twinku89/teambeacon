@@ -22,6 +22,7 @@ class ConnectorConfig:
     auth_mode: str = "pat_bearer"
     username: str | None = None
     timeout_seconds: int = 30
+    ca_bundle_path: str | None = None
 
 
 class JiraConnector(ABC):

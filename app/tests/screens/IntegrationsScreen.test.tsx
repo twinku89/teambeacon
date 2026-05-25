@@ -57,6 +57,26 @@ describe("IntegrationsScreen", () => {
           spaceCount: 1,
         },
       },
+      "/api/integrations/jenkins/status": {
+        source: "jenkins",
+        connected: true,
+        checkedAt: "2026-03-30T09:15:00Z",
+        config: {
+          jobUrl: "https://jenkins.example.com/job/release",
+          authUser: "teambeacon@example.com",
+          timeoutSeconds: 30,
+        },
+        checks: [
+          { name: "job_api", ok: true, detail: "reachable" },
+          { name: "auth", ok: true, detail: "authenticated" },
+        ],
+        metrics: {
+          jobName: "Release Pipeline",
+          buildable: true,
+          lastBuildNumber: 120,
+          lastBuildResult: "SUCCESS",
+        },
+      },
       "/api/integrations/jira/sync/status": {
         source: "jira",
         state: "idle",
@@ -82,20 +102,23 @@ describe("IntegrationsScreen", () => {
     expect(await screen.findByRole("heading", { name: "JIRA Connection" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "AI Model Connection" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Confluence Connection" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Jenkins Connection" })).toBeInTheDocument();
     expect(await screen.findByText("Provider: Ollama")).toBeInTheDocument();
     expect(await screen.findByText("Model: gemma4:e2b")).toBeInTheDocument();
+    expect(await screen.findByText("Job: Release Pipeline")).toBeInTheDocument();
+    expect(await screen.findByText("Last build: 120")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(5);
+      expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(6);
     });
 
     await waitFor(() => {
-      expect(screen.getAllByText("Connected")).toHaveLength(3);
-      expect(screen.getAllByText("2/2 connectivity checks passed.")).toHaveLength(3);
+      expect(screen.getAllByText("Connected")).toHaveLength(4);
+      expect(screen.getAllByText("2/2 connectivity checks passed.")).toHaveLength(4);
       expect(screen.getByRole("button", { name: "Check Now" })).toBeInTheDocument();
     });
 
-    expect(screen.getAllByText(/Last checked:/i)).toHaveLength(3);
+    expect(screen.getAllByText(/Last checked:/i)).toHaveLength(4);
     expect(screen.getByRole("button", { name: "Diagnostics" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Diagnostics" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Field Mapping Readiness" })).not.toBeInTheDocument();
@@ -155,6 +178,19 @@ describe("IntegrationsScreen", () => {
           { name: "auth", ok: true, detail: "reachable" },
           { name: "space_query", ok: true, detail: "responding" },
         ],
+      },
+      "/api/integrations/jenkins/status": {
+        source: "jenkins",
+        connected: true,
+        checkedAt: "2026-03-30T09:15:00Z",
+        config: {
+          jobUrl: "https://jenkins.example.com/job/release",
+        },
+        checks: [{ name: "job_api", ok: true, detail: "reachable" }],
+        metrics: {
+          jobName: "Release Pipeline",
+          lastBuildNumber: 120,
+        },
       },
       "/api/integrations/jira/sync/status": {
         source: "jira",
@@ -248,6 +284,19 @@ describe("IntegrationsScreen", () => {
           { name: "auth", ok: true, detail: "reachable" },
           { name: "space_query", ok: true, detail: "responding" },
         ],
+      },
+      "/api/integrations/jenkins/status": {
+        source: "jenkins",
+        connected: true,
+        checkedAt: "2026-03-30T09:15:00Z",
+        config: {
+          jobUrl: "https://jenkins.example.com/job/release",
+        },
+        checks: [{ name: "job_api", ok: true, detail: "reachable" }],
+        metrics: {
+          jobName: "Release Pipeline",
+          lastBuildNumber: 120,
+        },
       },
       "/api/integrations/jira/sync/status": {
         source: "jira",

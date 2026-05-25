@@ -161,6 +161,12 @@ vi.mock("../../src/components/content/screens/IntegrationsScreen", () => ({
   },
 }));
 
+vi.mock("../../src/components/content/screens/NewsDashboardScreen", () => ({
+  NewsDashboardScreen: function NewsDashboardScreen() {
+    return <p>Daily briefing stub</p>;
+  },
+}));
+
 vi.mock("../../src/components/content/screens/SprintBoardScreen", () => ({
   SprintBoardScreen: function SprintBoardScreen() {
     return <p>Sprint board stub</p>;
@@ -250,15 +256,12 @@ describe("Content topbar controls", () => {
     expect(screen.queryByRole("dialog", { name: "Team Insights Settings" })).not.toBeInTheDocument();
   });
 
-  it("renders each screen and wires executive topbar actions", () => {
+  it("renders active screens and keeps dormant dashboards out of navigation", () => {
     render(<Content appName="TeamBeacon" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Initiative Insights/ }));
-    expect(screen.getByText("Initiatives stub")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Reporting Period" }));
-    expect(screen.getByRole("dialog", { name: "Configure Reporting Period" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Configure Initiative" }));
-    expect(screen.getByRole("dialog", { name: "Configure Epic Metadata" })).toBeInTheDocument();
+    expect(screen.getByText("Daily briefing stub")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Initiative Insights/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Team Dashboard/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Sprint Insights/ }));
     expect(screen.getByText("Sprint board stub")).toBeInTheDocument();
@@ -268,15 +271,6 @@ describe("Content topbar controls", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Release Insights/ }));
     expect(screen.getByText("Releases stub")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Team Dashboard/ }));
-    expect(screen.getByText("Executive Summary")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Reporting Period" }));
-    expect(screen.getByRole("dialog", { name: "Configure Reporting Period" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Configure Initiatives" }));
-    expect(screen.getByRole("dialog", { name: "Configure Initiative Epics" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Export Dashboard" }));
-    expect(screen.getByText("Exports: 1")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Security Insights/ }));
     expect(screen.getByText("Security stub")).toBeInTheDocument();
