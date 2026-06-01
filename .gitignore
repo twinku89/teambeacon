@@ -1,6 +1,15 @@
 # Local secrets
 config/.env
 .env
+config/*.pem
+config/*.key
+config/*.p12
+config/*.jks
+
+# Local tool state
+.idea/
+.oca/
+.scanmasterpro/
 
 # Python
 __pycache__/

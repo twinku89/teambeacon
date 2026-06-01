@@ -21,3 +21,11 @@ tests
 docs
 
 config/.env
+config/*.pem
+config/*.key
+config/*.p12
+config/*.jks
+
+.idea
+.oca
+.scanmasterpro
