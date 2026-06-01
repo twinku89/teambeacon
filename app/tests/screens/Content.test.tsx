@@ -1,9 +1,111 @@
 import { fireEvent, render, screen } from "@testing-library/preact";
 import { within } from "@testing-library/dom";
+import { beforeEach } from "vitest";
 import { Content } from "../../src/components/content";
 import { setupFetchMock } from "../utils/fetchMock";
 
+const ACTIVE_SCREEN_PREFERENCE_KEY = "teambeacon.activeScreen";
+
+function setupContentShellFetchMock() {
+  setupFetchMock({
+    "/api/news/dashboard": {
+      source: "rss",
+      generatedAt: "2026-05-25T07:00:00+00:00",
+      timezone: "Australia/Melbourne",
+      categories: [],
+      error: null,
+    },
+    "/api/security/audit": {
+      source: "jenkins_security_audit",
+      generatedAt: "2026-05-28T00:18:18+00:00",
+      cached: false,
+      pipeline: {
+        buildNumber: "810",
+        status: "FAILED",
+        startedAt: "2026-05-27T20:15:01.086000+00:00",
+        durationMillis: 37871,
+      },
+      summary: {
+        totalFindings: 1,
+        failedFindings: 1,
+        skippedFindings: 0,
+        severityCounts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+        failedLayerCount: 1,
+        passedLayerCount: 3,
+      },
+      layers: [
+        {
+          name: "Backend",
+          stageStatus: "SUCCESS",
+          durationMillis: 1000,
+          findingCount: 0,
+          failedFindingCount: 0,
+          skippedFindingCount: 0,
+          severityCounts: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+        },
+        {
+          name: "Frontend",
+          stageStatus: "SUCCESS",
+          durationMillis: 1000,
+          findingCount: 0,
+          failedFindingCount: 0,
+          skippedFindingCount: 0,
+          severityCounts: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+        },
+        {
+          name: "Trivy Scan",
+          stageStatus: "SUCCESS",
+          durationMillis: 1000,
+          findingCount: 0,
+          failedFindingCount: 0,
+          skippedFindingCount: 0,
+          severityCounts: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+        },
+        {
+          name: "UI",
+          stageStatus: "FAILED",
+          durationMillis: 37871,
+          findingCount: 1,
+          failedFindingCount: 1,
+          skippedFindingCount: 0,
+          severityCounts: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+        },
+      ],
+      findings: [],
+      trend: [],
+      error: null,
+    },
+  });
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+  window.history.replaceState(null, "", "/");
+});
+
 describe("Content", () => {
+  it("opens the dashboard from the URL hash on browser refresh", async () => {
+    setupContentShellFetchMock();
+    window.history.replaceState(null, "", "/#security");
+
+    render(<Content appName="TeamBeacon" />);
+
+    expect(await screen.findByRole("heading", { name: "Security Insights" })).toBeInTheDocument();
+    expect(window.localStorage.getItem(ACTIVE_SCREEN_PREFERENCE_KEY)).toBe("security");
+  });
+
+  it("persists the selected dashboard to the URL and preferences", async () => {
+    setupContentShellFetchMock();
+
+    render(<Content appName="TeamBeacon" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Security Insights/ }));
+
+    expect(await screen.findByRole("heading", { name: "Security Insights" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#security");
+    expect(window.localStorage.getItem(ACTIVE_SCREEN_PREFERENCE_KEY)).toBe("security");
+  });
+
   it("renders construction markers only for static screens in sidebar", async () => {
     setupFetchMock({
       "/api/integrations/jira/status": {

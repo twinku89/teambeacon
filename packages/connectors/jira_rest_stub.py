@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -24,6 +25,8 @@ from .tls import create_ssl_context
 DEFAULT_STORY_POINTS_FIELD = "customfield_10016"
 DEFAULT_EPIC_LINK_FIELD = "customfield_10014"
 DEFAULT_SPRINT_FIELD_CANDIDATES = ("sprint", "customfield_10901", "customfield_10020")
+TRANSIENT_HTTP_STATUS_CODES = {502, 503, 504}
+REQUEST_RETRY_DELAYS_SECONDS = (0.25, 0.75)
 
 
 class JiraAPIError(RuntimeError):
@@ -131,18 +134,24 @@ class JiraRestConnector(JiraConnector):
         headers = {"Accept": "application/json", **self._auth_headers()}
         request = Request(url=url, headers=headers, method="GET")
         ssl_context = create_ssl_context(self.config.ca_bundle_path)
-        try:
-            with urlopen(request, timeout=self.config.timeout_seconds, context=ssl_context) as response:
-                raw = response.read().decode("utf-8")
-        except HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            raise JiraAPIError(
-                f"JIRA request failed with HTTP {exc.code}: {path}",
-                status_code=exc.code,
-                body=body,
-            ) from exc
-        except URLError as exc:
-            raise JiraAPIError(f"JIRA request failed for {path}: {exc}") from exc
+        for attempt in range(len(REQUEST_RETRY_DELAYS_SECONDS) + 1):
+            try:
+                with urlopen(request, timeout=self.config.timeout_seconds, context=ssl_context) as response:
+                    raw = response.read().decode("utf-8")
+                break
+            except HTTPError as exc:
+                body = exc.read().decode("utf-8", errors="replace")
+                can_retry = exc.code in TRANSIENT_HTTP_STATUS_CODES and attempt < len(REQUEST_RETRY_DELAYS_SECONDS)
+                if can_retry:
+                    time.sleep(REQUEST_RETRY_DELAYS_SECONDS[attempt])
+                    continue
+                raise JiraAPIError(
+                    f"JIRA request failed with HTTP {exc.code}: {path}",
+                    status_code=exc.code,
+                    body=body,
+                ) from exc
+            except URLError as exc:
+                raise JiraAPIError(f"JIRA request failed for {path}: {exc}") from exc
 
         if not raw:
             return {}

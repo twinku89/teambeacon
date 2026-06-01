@@ -7,6 +7,7 @@
  */
 import { h } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { getPreferenceSync, setPreference } from "../../lib/persistence";
 import { IncidentResponseScreen } from "./screens/IncidentResponseScreen";
 import { IntegrationsScreen } from "./screens/IntegrationsScreen";
 import { NewsDashboardScreen } from "./screens/NewsDashboardScreen";
@@ -43,8 +44,11 @@ type Props = {
   appName: string;
 };
 
+const ACTIVE_SCREEN_PREFERENCE_KEY = "teambeacon.activeScreen";
+const DEFAULT_SCREEN_ID: ScreenId = "news";
+
 const NAV_ITEMS: NavItem[] = [
-  { id: "news", label: "Daily Briefing", blurb: "World / AU / India / Books / Dog Training", showConstruction: false },
+  { id: "news", label: "Daily Briefing", blurb: "World / AU / Tech / United / India", showConstruction: false },
   { id: "sprint", label: "Sprint Insights", blurb: "Overview / Progress / Scope Creep / Blockers", showConstruction: false },
   { id: "team", label: "Team Insights", blurb: "Sprint Trend / Cycle Time", showConstruction: false },
   { id: "security", label: "Security Insights", blurb: "Scan / Vulnerability Posture", showConstruction: true },
@@ -52,6 +56,36 @@ const NAV_ITEMS: NavItem[] = [
   { id: "releases", label: "Release Insights", blurb: "Cycle Time / Readiness / Risk", showConstruction: false },
   { id: "integrations", label: "Settings", blurb: "Connections / Metadata Configuration", showConstruction: false },
 ];
+
+function isScreenId(value: string | null | undefined): value is ScreenId {
+  return NAV_ITEMS.some((item) => item.id === value);
+}
+
+function screenIdFromHash(hash: string): ScreenId | null {
+  const normalized = hash.replace(/^#\/?/, "").trim();
+  const [candidate] = normalized.split(/[/?&]/);
+  return isScreenId(candidate) ? candidate : null;
+}
+
+function readInitialScreen(): ScreenId {
+  if (typeof window === "undefined") return DEFAULT_SCREEN_ID;
+  const hashScreen = screenIdFromHash(window.location.hash);
+  if (hashScreen) return hashScreen;
+
+  const persistedScreen = getPreferenceSync(ACTIVE_SCREEN_PREFERENCE_KEY);
+  return isScreenId(persistedScreen) ? persistedScreen : DEFAULT_SCREEN_ID;
+}
+
+function persistActiveScreen(screenId: ScreenId): void {
+  setPreference(ACTIVE_SCREEN_PREFERENCE_KEY, screenId).catch(() => {
+    // Best-effort preference only; URL hash still preserves browser refresh.
+  });
+
+  if (typeof window === "undefined") return;
+  const nextHash = `#${screenId}`;
+  if (window.location.hash === nextHash) return;
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${nextHash}`);
+}
 
 function screenTitle(id: ScreenId): string {
   const mapping: Record<ScreenId, string> = {
@@ -262,9 +296,14 @@ function TrendWindowDropdown({ value, onChange }: TrendWindowDropdownProps) {
 }
 
 export function Content({ appName }: Props) {
-  const [active, setActive] = useState<ScreenId>("news");
+  const [active, setActive] = useState<ScreenId>(() => readInitialScreen());
   const [teamTrendWindowSelection, setTeamTrendWindowSelection] = useState<number>(12);
   const heading = useMemo(() => screenTitle(active), [active]);
+
+  const activateScreen = (screenId: ScreenId) => {
+    setActive(screenId);
+    persistActiveScreen(screenId);
+  };
 
   const updateTeamTrendWindowSelection = (nextValue: number) => {
     setTeamTrendWindowSelection(nextValue);
@@ -286,6 +325,22 @@ export function Content({ appName }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    persistActiveScreen(active);
+
+    const handleHashChange = () => {
+      const screenId = screenIdFromHash(window.location.hash);
+      if (screenId) {
+        setActive(screenId);
+      }
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
   return (
     <div class="tb-app-frame">
       <aside class="tb-sidebar">
@@ -303,7 +358,7 @@ export function Content({ appName }: Props) {
               key={item.id}
               type="button"
               class={`tb-nav-item${active === item.id ? " is-active" : ""}`}
-              onClick={() => setActive(item.id)}
+              onClick={() => activateScreen(item.id)}
             >
               <div class="tb-nav-title-row">
                 <span class="tb-nav-title">{item.label}</span>

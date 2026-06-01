@@ -1,12 +1,38 @@
 from __future__ import annotations
 
+from io import BytesIO
 import unittest
 from datetime import datetime, timezone
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from packages.connectors.interfaces import ConnectorConfig
-from packages.connectors.jira_rest_stub import JiraRestConnector
+from packages.connectors.jira_rest_stub import JiraAPIError, JiraRestConnector
 from packages.connectors.models import SyncBatch
+
+
+class FakeHttpResponse:
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+
+    def __enter__(self) -> "FakeHttpResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> bool:  # noqa: ANN001
+        return False
+
+    def read(self) -> bytes:
+        return self.body
+
+
+def make_http_error(status_code: int, body: bytes = b"") -> HTTPError:
+    return HTTPError(
+        "https://jira.example.com/rest/api/2/search",
+        status_code,
+        "HTTP failure",
+        hdrs=None,
+        fp=BytesIO(body),
+    )
 
 
 class JiraConnectorUnitTests(unittest.TestCase):
@@ -340,6 +366,33 @@ class JiraConnectorUnitTests(unittest.TestCase):
         headers = connector._auth_headers()
         self.assertIn("Authorization", headers)
         self.assertTrue(headers["Authorization"].startswith("Basic "))
+
+    def test_request_json_retries_transient_http_errors(self) -> None:
+        with patch(
+            "packages.connectors.jira_rest_stub.urlopen",
+            side_effect=[
+                make_http_error(503, b'{"errorMessages":["temporary unavailable"]}'),
+                FakeHttpResponse(b'{"ok": true}'),
+            ],
+        ) as mocked_urlopen, patch("packages.connectors.jira_rest_stub.time.sleep") as mocked_sleep:
+            payload = self.connector._request_json("/rest/api/2/search")
+
+        self.assertEqual(payload, {"ok": True})
+        self.assertEqual(mocked_urlopen.call_count, 2)
+        mocked_sleep.assert_called_once_with(0.25)
+
+    def test_request_json_does_not_retry_permission_errors(self) -> None:
+        with patch(
+            "packages.connectors.jira_rest_stub.urlopen",
+            side_effect=make_http_error(401, b'{"errorMessages":["unauthorized"]}'),
+        ) as mocked_urlopen, patch("packages.connectors.jira_rest_stub.time.sleep") as mocked_sleep:
+            with self.assertRaises(JiraAPIError) as exc_ctx:
+                self.connector._request_json("/rest/api/2/search")
+
+        self.assertEqual(exc_ctx.exception.status_code, 401)
+        self.assertIn("unauthorized", exc_ctx.exception.body or "")
+        self.assertEqual(mocked_urlopen.call_count, 1)
+        mocked_sleep.assert_not_called()
 
 
 if __name__ == "__main__":
