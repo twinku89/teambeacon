@@ -239,6 +239,13 @@ export type DogTrainingTip = {
   categoryId: "dogTraining";
   label: string;
   description: string;
+  id?: string;
+  ageMonths?: number;
+  ageDays?: number;
+  ageLabel?: string;
+  stageLabel?: string;
+  skillName?: string;
+  skillArea?: string;
   title: string;
   focus: string;
   steps: string[];
@@ -264,7 +271,8 @@ export type NewsDashboardResponse = {
   cached?: boolean;
   categories: NewsCategory[];
   bookOfTheDay?: BookOfTheDay;
-  trainingTip: DogTrainingTip;
+  trainingTip?: DogTrainingTip;
+  trainingTips?: DogTrainingTip[];
   error?: string | null;
 };
 

@@ -18,6 +18,8 @@ import {
   fetchNewsDashboard,
 } from "../../../lib/api";
 
+const TRAINING_TIP_COUNT_STORAGE_PREFIX = "teambeacon.dailyBriefing.trainingTipCount";
+
 function formatTimestamp(value?: string | null): string {
   if (!value) return "No timestamp";
   const parsed = new Date(value);
@@ -45,6 +47,52 @@ function headlineLabel(articleCount: number): string {
 
 function newsSectionId(categoryId: string): string {
   return `news-${categoryId}`;
+}
+
+function localDateKey(value?: string | null, timezone = "Australia/Melbourne"): string {
+  if (!value) return "unknown";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10) || "unknown";
+
+  try {
+    const parts = new Intl.DateTimeFormat("en", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: timezone,
+      year: "numeric",
+    }).formatToParts(parsed);
+    const part = (type: string) => parts.find((candidate) => candidate.type === type)?.value;
+    const year = part("year");
+    const month = part("month");
+    const day = part("day");
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch {
+    // Fall back to the API timestamp when the runtime does not support the named timezone.
+  }
+
+  return value.slice(0, 10) || "unknown";
+}
+
+function trainingTipCountStorageKey(payload: NewsDashboardResponse): string {
+  return `${TRAINING_TIP_COUNT_STORAGE_PREFIX}.${localDateKey(payload.generatedAt, payload.timezone)}`;
+}
+
+function clampTrainingTipCount(value: number, maxCount: number): number {
+  if (maxCount <= 0) return 0;
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.min(maxCount, Math.floor(value)));
+}
+
+function readTrainingTipCount(storageKey: string | null, maxCount: number): number {
+  if (!storageKey || typeof window === "undefined") return maxCount > 0 ? 1 : 0;
+  const stored = window.localStorage.getItem(storageKey);
+  if (!stored) return maxCount > 0 ? 1 : 0;
+  return clampTrainingTipCount(Number.parseInt(stored, 10), maxCount);
+}
+
+function writeTrainingTipCount(storageKey: string | null, count: number): void {
+  if (!storageKey || typeof window === "undefined") return;
+  window.localStorage.setItem(storageKey, String(count));
 }
 
 function NewsArticleList({ articles }: { articles: NewsArticle[] }) {
@@ -88,25 +136,58 @@ function NewsCategoryPanel({ category }: { category: NewsCategory }) {
   );
 }
 
-function DogTrainingPanel({ tip }: { tip: DogTrainingTip }) {
+function DogTrainingPanel({
+  canAddTip,
+  onAddTip,
+  tips,
+  totalTipCount,
+}: {
+  canAddTip: boolean;
+  onAddTip: () => void;
+  tips: DogTrainingTip[];
+  totalTipCount: number;
+}) {
+  const firstTip = tips[0];
+  if (!firstTip) return null;
+  const remainingTipCount = Math.max(0, totalTipCount - tips.length);
+
   return (
     <article id="news-dog-training" class="tb-news-panel tb-news-training-panel">
       <header>
         <div>
-          <h3>{tip.label}</h3>
-          <p>{tip.description}</p>
+          <h3>{firstTip.label}</h3>
+          <p>{firstTip.description}</p>
         </div>
-        <span>Daily focus</span>
+        <span>{tips.length === 1 ? "1 daily focus" : `${tips.length} daily focuses`}</span>
       </header>
       <div class="tb-news-training-body">
-        <h4>{tip.title}</h4>
-        <p>{tip.focus}</p>
-        <ol>
-          {tip.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        {tip.note ? <p class="tb-muted-note">{tip.note}</p> : null}
+        {tips.map((tip, index) => (
+          <section class="tb-news-training-tip" key={tip.id ?? `${tip.title}-${index}`}>
+            <div class="tb-news-training-tip-heading">
+              <span>Tip {index + 1}</span>
+              <h4>{tip.title}</h4>
+            </div>
+            {tip.skillName || tip.skillArea ? (
+              <div class="tb-news-training-tags">
+                {tip.skillArea ? <span class="tb-news-training-skill">Area: {tip.skillArea}</span> : null}
+                {tip.skillName ? <span class="tb-news-training-skill">Skill: {tip.skillName}</span> : null}
+              </div>
+            ) : null}
+            <p>{tip.focus}</p>
+            <ol>
+              {tip.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            {tip.note ? <p class="tb-muted-note">{tip.note}</p> : null}
+          </section>
+        ))}
+        <div class="tb-news-training-actions">
+          <button type="button" class="tb-btn tb-btn-sm" onClick={onAddTip} disabled={!canAddTip}>
+            {canAddTip ? "Add another tip" : "All daily tips added"}
+          </button>
+          {remainingTipCount > 0 ? <small>{remainingTipCount} more available today</small> : null}
+        </div>
       </div>
     </article>
   );
@@ -147,6 +228,7 @@ export function NewsDashboardScreen() {
   const [payload, setPayload] = useState<NewsDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [visibleTrainingTipCount, setVisibleTrainingTipCount] = useState(1);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -174,11 +256,36 @@ export function NewsDashboardScreen() {
   const india = categoryById(payload?.categories ?? [], "india");
   const newsCategories = [world, australia, tech, manchesterUnited, india]
     .filter((category): category is NewsCategory => Boolean(category));
+  const trainingTips = useMemo(() => {
+    if (payload?.trainingTips && payload.trainingTips.length > 0) return payload.trainingTips;
+    return payload?.trainingTip ? [payload.trainingTip] : [];
+  }, [payload]);
+  const trainingTipStorageKey = useMemo(
+    () => (payload ? trainingTipCountStorageKey(payload) : null),
+    [payload],
+  );
+  const visibleTrainingTips = useMemo(
+    () => trainingTips.slice(0, clampTrainingTipCount(visibleTrainingTipCount, trainingTips.length)),
+    [trainingTips, visibleTrainingTipCount],
+  );
+  const canAddTrainingTip = visibleTrainingTips.length < trainingTips.length;
   const sectionLinks = [
     ...newsCategories.map((category) => ({ href: `#${newsSectionId(category.id)}`, label: category.label })),
     ...(payload?.bookOfTheDay ? [{ href: "#news-book-of-the-day", label: payload.bookOfTheDay.label }] : []),
-    ...(payload?.trainingTip ? [{ href: "#news-dog-training", label: payload.trainingTip.label }] : []),
+    ...(trainingTips.length > 0 ? [{ href: "#news-dog-training", label: trainingTips[0].label }] : []),
   ];
+
+  useEffect(() => {
+    setVisibleTrainingTipCount(readTrainingTipCount(trainingTipStorageKey, trainingTips.length));
+  }, [trainingTipStorageKey, trainingTips.length]);
+
+  const addTrainingTip = useCallback(() => {
+    setVisibleTrainingTipCount((currentCount) => {
+      const nextCount = clampTrainingTipCount(currentCount + 1, trainingTips.length);
+      writeTrainingTipCount(trainingTipStorageKey, nextCount);
+      return nextCount;
+    });
+  }, [trainingTipStorageKey, trainingTips.length]);
 
   return (
     <div class="tb-content-stack">
@@ -244,7 +351,14 @@ export function NewsDashboardScreen() {
 
       {payload?.bookOfTheDay ? <BookOfTheDayPanel book={payload.bookOfTheDay} /> : null}
 
-      {payload?.trainingTip ? <DogTrainingPanel tip={payload.trainingTip} /> : null}
+      {visibleTrainingTips.length > 0 ? (
+        <DogTrainingPanel
+          canAddTip={canAddTrainingTip}
+          onAddTip={addTrainingTip}
+          tips={visibleTrainingTips}
+          totalTipCount={trainingTips.length}
+        />
+      ) : null}
 
       {loading && !payload ? <p class="tb-muted-note">Loading today's news feeds...</p> : null}
     </div>

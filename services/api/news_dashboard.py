@@ -23,6 +23,7 @@ NEWS_CACHE_SECONDS = 900
 NEWS_TIMEOUT_SECONDS = 8
 MAX_ITEMS_PER_SOURCE = 6
 BOOK_ROTATION_EPOCH = date(2026, 1, 1)
+DEFAULT_GSD_PUPPY_BIRTH_DATE = date(2025, 9, 1)
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,63 @@ def _melbourne_timezone() -> timezone:
     return ZoneInfo("Australia/Melbourne")
 
 
+def _local_melbourne_date(now: datetime) -> date:
+    return now.astimezone(_melbourne_timezone()).date()
+
+
+def _parse_iso_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def _puppy_birth_date() -> date:
+    return _parse_iso_date(os.environ.get("DOG_TRAINING_PUPPY_BIRTH_DATE")) or DEFAULT_GSD_PUPPY_BIRTH_DATE
+
+
+def _age_months_on(current_date: date, birth_date: date) -> int:
+    month_count = (current_date.year - birth_date.year) * 12 + current_date.month - birth_date.month
+    if current_date.day < birth_date.day:
+        month_count -= 1
+    return max(0, month_count)
+
+
+def _age_label(age_months: int) -> str:
+    if age_months < 24:
+        return f"{age_months}-month-old"
+    years = age_months // 12
+    months = age_months % 12
+    if months == 0:
+        return f"{years}-year-old"
+    return f"{years}-year, {months}-month-old"
+
+
+def _training_stage_label(age_months: int) -> str:
+    if age_months < 6:
+        return "puppy foundations"
+    if age_months < 12:
+        return "adolescent working-line foundations"
+    if age_months < 18:
+        return "young dog proofing"
+    return "young adult maintenance"
+
+
+def _dog_training_profile(now: datetime) -> dict[str, Any]:
+    local_date = _local_melbourne_date(now)
+    birth_date = _puppy_birth_date()
+    age_months = _age_months_on(local_date, birth_date)
+    return {
+        "birthDate": birth_date.isoformat(),
+        "ageMonths": age_months,
+        "ageDays": max(0, (local_date - birth_date).days),
+        "ageLabel": _age_label(age_months),
+        "stageLabel": _training_stage_label(age_months),
+    }
+
+
 def _strip_markup(value: str | None) -> str:
     if not value:
         return ""
@@ -203,67 +261,451 @@ def _article_sort_key(article: dict[str, Any]) -> float:
     return 0
 
 
-def _build_training_tip(now: datetime) -> dict[str, Any]:
-    day_index = now.astimezone(_melbourne_timezone()).timetuple().tm_yday % 5
-    tips = [
+def _training_tip_catalog(age_months: int) -> list[dict[str, Any]]:
+    if age_months < 6:
+        return [
+            {
+                "id": "name-game-foundations",
+                "title": "Name game foundations",
+                "skillName": "Name response",
+                "skillArea": "Obedience",
+                "focus": "Build fast orientation to his name before adding bigger distractions.",
+                "steps": [
+                    "Say his name once, mark the head turn, then feed close to you.",
+                    "Practise in two quiet rooms before trying the garden or footpath.",
+                    "Stop after 6 to 8 clean responses so the cue stays bright.",
+                ],
+            },
+            {
+                "id": "handling-consent-reps",
+                "title": "Handling consent reps",
+                "skillName": "Handling consent",
+                "skillArea": "Life skills",
+                "focus": "Make grooming, paws, ears, collar grabs, and vet-style handling predictable.",
+                "steps": [
+                    "Touch for one second, feed, then release before he pulls away.",
+                    "Practise paws, ears, collar, harness clips, and mouth checks separately.",
+                    "Keep sessions short enough that he chooses to re-engage.",
+                ],
+            },
+            {
+                "id": "crate-and-mat-comfort",
+                "title": "Crate and mat comfort",
+                "skillName": "Settle on mat",
+                "skillArea": "Life skills",
+                "focus": "Create safe rest locations before adolescence makes settling harder.",
+                "steps": [
+                    "Feed treats on the mat or in the crate with the door open.",
+                    "Add tiny duration only while his body stays loose.",
+                    "Release him calmly so rest spots do not feel like traps.",
+                ],
+            },
+            {
+                "id": "tiny-recall-parties",
+                "title": "Tiny recall parties",
+                "skillName": "Puppy recall",
+                "skillArea": "Obedience",
+                "focus": "Make coming back feel better than continuing whatever he was doing.",
+                "steps": [
+                    "Call once from a few steps away in a low-distraction space.",
+                    "Move backward, praise, and feed several small rewards when he arrives.",
+                    "Let him return to exploring when it is safe, so recall does not always end fun.",
+                ],
+            },
+            {
+                "id": "socialization-observation",
+                "title": "Socialization by observation",
+                "skillName": "Calm observation",
+                "skillArea": "Confidence building",
+                "focus": "Show him the world without forcing greetings or busy interactions.",
+                "steps": [
+                    "Watch people, traffic, surfaces, and dogs from comfortable distance.",
+                    "Feed for checking in and for calm curiosity.",
+                    "Leave before he becomes tired, worried, or frantic.",
+                ],
+            },
+        ]
+
+    if age_months < 12:
+        return [
+            {
+                "id": "engagement-check-ins",
+                "title": "Engagement check-ins",
+                "skillName": "Voluntary check-in",
+                "skillArea": "Life skills",
+                "focus": "Teach your adolescent working-line GSD to offer attention without being nagged.",
+                "steps": [
+                    "Stand still in a quiet area and wait for a head turn or eye contact.",
+                    "Mark the instant he checks in, then feed close to your leg.",
+                    "Move again so checking in becomes a way to restart the walk.",
+                ],
+            },
+            {
+                "id": "hand-target",
+                "title": "Hand target",
+                "skillName": "Nose-to-palm target",
+                "skillArea": "Life skills",
+                "focus": "Build a simple way to move, redirect, and position him without lead pressure.",
+                "steps": [
+                    "Present an open palm a few centimetres from his nose.",
+                    "Mark the nose touch, feed from the other hand, then reset.",
+                    "Add the cue once he is confidently moving to touch your palm.",
+                ],
+            },
+            {
+                "id": "place-cue-with-release",
+                "title": "Place cue with release",
+                "skillName": "Go to mat",
+                "skillArea": "Life skills",
+                "focus": "Teach a clear stationing behaviour for meals, visitors, calls, and recovery.",
+                "steps": [
+                    "Drop a treat on the mat and mark when all four paws are on it.",
+                    "Feed two or three calm treats while he stays there.",
+                    "Use a release cue before he steps off so the finish is clear.",
+                ],
+            },
+            {
+                "id": "loose-leash-follow-me",
+                "title": "Loose-leash follow me",
+                "skillName": "Loose-leash walking",
+                "skillArea": "Obedience",
+                "focus": "Teach him that staying near you makes forward motion continue.",
+                "steps": [
+                    "Start in a low-distraction space and reward at your trouser seam every few steps.",
+                    "Change direction before the lead tightens and reward when he catches up.",
+                    "Keep reps to 30 to 60 seconds, then release him to sniff.",
+                ],
+            },
+            {
+                "id": "recall-away-from-movement",
+                "title": "Recall away from movement",
+                "skillName": "Recall from distraction",
+                "skillArea": "Obedience",
+                "focus": "Practise turning away from movement before it becomes too hard.",
+                "steps": [
+                    "Use a long line and choose movement at a distance where he can still eat.",
+                    "Say the recall cue once, move backward, and reward when he turns with you.",
+                    "Release him back to safe exploring after some recalls so coming back does not always end fun.",
+                ],
+            },
+            {
+                "id": "leave-it-foundations",
+                "title": "Leave it foundations",
+                "skillName": "Leave it",
+                "skillArea": "Life skills",
+                "focus": "Teach disengagement from food, objects, and movement as a rewarded choice.",
+                "steps": [
+                    "Place boring food under your foot and wait without repeating the cue.",
+                    "Mark the moment he backs off or looks at you, then feed a better reward from your hand.",
+                    "Add the verbal cue only after he understands that leaving makes better things happen.",
+                ],
+            },
+            {
+                "id": "drop-and-trade",
+                "title": "Drop and trade",
+                "skillName": "Drop",
+                "skillArea": "Obedience",
+                "focus": "Build a clean release of toys and found objects without conflict.",
+                "steps": [
+                    "Offer a low-value toy, then present food at his nose.",
+                    "Mark when the mouth opens, feed, and give the toy back.",
+                    "Add the cue once the trade is smooth and predictable.",
+                ],
+            },
+            {
+                "id": "middle-position",
+                "title": "Middle position",
+                "skillName": "Middle",
+                "skillArea": "Confidence building",
+                "focus": "Teach him to come between your legs as a useful station and confidence skill.",
+                "steps": [
+                    "Lure him between your legs from behind and feed while he is centred.",
+                    "Reset by tossing a treat forward, then invite him back through.",
+                    "Add the cue after the path is fluent and his body stays relaxed.",
+                ],
+            },
+            {
+                "id": "scent-search-cue",
+                "title": "Scent search cue",
+                "skillName": "Find it",
+                "skillArea": "Confidence building",
+                "focus": "Give the working brain a structured search game with a clear start and finish.",
+                "steps": [
+                    "Let him watch you place three treats in easy grass or around one room.",
+                    "Cue the search, then stay quiet while he works.",
+                    "Use an all-done cue and move to calm chewing or water after the last find.",
+                ],
+            },
+            {
+                "id": "chin-rest-care",
+                "title": "Chin rest for care",
+                "skillName": "Chin rest",
+                "skillArea": "Life skills",
+                "focus": "Teach a cooperative-care position for grooming, checks, and calm handling.",
+                "steps": [
+                    "Hold a flat palm or towel at chest height and reward any chin contact.",
+                    "Feed for one second of stillness, then release before he lifts away.",
+                    "Gradually add tiny ear, collar, paw, or brush movements while the chin stays down.",
+                ],
+            },
+            {
+                "id": "down-stay-with-release",
+                "title": "Down stay with release",
+                "skillName": "Down stay",
+                "skillArea": "Obedience",
+                "focus": "Build a calm position that has a clear start, duration, and finish.",
+                "steps": [
+                    "Cue down, feed between his paws, and release after one quiet second.",
+                    "Add duration before distance so the behaviour stays easy to win.",
+                    "Use the release cue every time so he learns not to self-release.",
+                ],
+            },
+            {
+                "id": "sit-to-greet",
+                "title": "Sit to greet",
+                "skillName": "Polite greeting",
+                "skillArea": "Life skills",
+                "focus": "Turn greetings into a predictable pattern instead of a burst of jumping.",
+                "steps": [
+                    "Practise with one calm person before trying visitors or busy paths.",
+                    "Reward four paws on the floor, then ask for a simple sit.",
+                    "End the greeting and reset if he launches forward or cannot take food.",
+                ],
+            },
+            {
+                "id": "doorway-boundary",
+                "title": "Doorway boundary",
+                "skillName": "Wait at doors",
+                "skillArea": "Life skills",
+                "focus": "Teach him to pause at thresholds until released.",
+                "steps": [
+                    "Stand at a door, reward stillness, and open it only a small amount.",
+                    "Close the door calmly if he moves forward before the release.",
+                    "Release him through when the lead is loose and his body is settled.",
+                ],
+            },
+            {
+                "id": "body-awareness-ladder",
+                "title": "Body awareness ladder",
+                "skillName": "Rear-foot awareness",
+                "skillArea": "Confidence building",
+                "focus": "Help the adolescent body learn careful feet and thoughtful movement.",
+                "steps": [
+                    "Lay poles, broom handles, or safe low objects on the ground.",
+                    "Lure slowly so he steps over one foot at a time instead of bouncing.",
+                    "Reward pauses and careful choices more than speed.",
+                ],
+            },
+            {
+                "id": "novel-surface-confidence",
+                "title": "Novel surface confidence",
+                "skillName": "Surface confidence",
+                "skillArea": "Confidence building",
+                "focus": "Build confidence around safe textures, sounds, and unstable-looking surfaces.",
+                "steps": [
+                    "Start with easy surfaces such as cardboard, towels, rubber mats, or low platforms.",
+                    "Reward investigation, one paw, two paws, then relaxed movement.",
+                    "Let him step off whenever he chooses so confidence stays voluntary.",
+                ],
+            },
+            {
+                "id": "toy-impulse-control",
+                "title": "Toy impulse control",
+                "skillName": "Wait for toy release",
+                "skillArea": "Obedience",
+                "focus": "Use toy drive to practise listening before the game starts.",
+                "steps": [
+                    "Hold the toy still and reward a sit, down, or eye contact before movement begins.",
+                    "Use a clear release word to start the tug or chase.",
+                    "Pause often for drop, reset, and another release so control predicts more play.",
+                ],
+            },
+            {
+                "id": "settle-while-life-happens",
+                "title": "Settle while life happens",
+                "skillName": "Everyday settle",
+                "skillArea": "Life skills",
+                "focus": "Practise calm while normal household movement happens around him.",
+                "steps": [
+                    "Send him to a mat while you make tea, fold laundry, or answer a short call.",
+                    "Feed for relaxed body shifts, chin dips, or quiet watching.",
+                    "Release before he gets up so the session ends with success.",
+                ],
+            },
+            {
+                "id": "platform-pivot",
+                "title": "Platform pivot",
+                "skillName": "Pivot awareness",
+                "skillArea": "Confidence building",
+                "focus": "Build confidence, coordination, and handler focus with a small platform.",
+                "steps": [
+                    "Reward front paws on a stable low platform or thick book.",
+                    "Lure a tiny side step and mark any rear-foot movement.",
+                    "Keep it playful and slow so he learns body control without frustration.",
+                ],
+            },
+        ]
+
+    if age_months < 18:
+        return [
+            {
+                "id": "proofed-recall-layers",
+                "title": "Proofed recall layers",
+                "skillName": "Proofed recall",
+                "skillArea": "Obedience",
+                "focus": "Move recall from puppy enthusiasm into reliable young-dog habit.",
+                "steps": [
+                    "Practise on a long line before expecting off-leash reliability.",
+                    "Reward heavily for turning away from sniffing, toys, or movement.",
+                    "Release him back to safe exploration after some recalls.",
+                ],
+            },
+            {
+                "id": "place-duration-with-release",
+                "title": "Place duration with release",
+                "skillName": "Place duration",
+                "skillArea": "Life skills",
+                "focus": "Build a practical settle that can survive household movement.",
+                "steps": [
+                    "Send him to the mat, feed calmly, and add duration in small increments.",
+                    "Walk one step away and return before he breaks position.",
+                    "Use a clear release cue so he learns when the job is finished.",
+                ],
+            },
+            {
+                "id": "heel-position-refresh",
+                "title": "Heel position refresh",
+                "skillName": "Heel position",
+                "skillArea": "Obedience",
+                "focus": "Keep position clear without drilling so long that enthusiasm drops.",
+                "steps": [
+                    "Reward the first step in position before asking for longer sequences.",
+                    "Use turns and pace changes to make the exercise active.",
+                    "Break after 30 to 60 seconds and let him sniff.",
+                ],
+            },
+            {
+                "id": "cooperative-care-proofing",
+                "title": "Cooperative care proofing",
+                "skillName": "Cooperative care",
+                "skillArea": "Life skills",
+                "focus": "Make adult-size handling easier before strength and confidence peak.",
+                "steps": [
+                    "Practise chin rest, paw hold, ear check, and collar hold separately.",
+                    "Feed for stillness, then release before he opts out.",
+                    "Add grooming tools only after the body behavior is relaxed.",
+                ],
+            },
+            {
+                "id": "scent-search-control",
+                "title": "Scent search control",
+                "skillName": "Controlled scent search",
+                "skillArea": "Confidence building",
+                "focus": "Give the working brain a job while practising starts, pauses, and finishes.",
+                "steps": [
+                    "Hide food or a toy in one easy area and cue the search.",
+                    "Pause between searches so arousal can drop.",
+                    "Finish with a clear all-done cue and a calm activity.",
+                ],
+            },
+        ]
+
+    return [
         {
-            "title": "Distance-first trigger work",
-            "focus": "Keep him far enough from triggers that he can still think, sniff, and take food.",
+            "id": "adult-maintenance-audit",
+            "title": "Adult maintenance audit",
+            "skillName": "Core skill maintenance",
+            "skillArea": "Obedience",
+            "focus": "Keep core skills fluent instead of waiting until they fade.",
             "steps": [
-                "Start where he notices the trigger but does not bark or lunge.",
-                "Mark and reward calm check-ins, then move away before intensity builds.",
-                "End after 3 to 5 successful repetitions, not when he is already overloaded.",
+                "Pick one skill each day: recall, leash, settle, handling, or toy rules.",
+                "Practise in an easy context before adding difficulty.",
+                "Record the weakest skill and make tomorrow's version simpler.",
             ],
         },
         {
-            "title": "Decompression before training",
-            "focus": "Give the adolescent brain an outlet before asking for polished behaviour.",
+            "id": "fitness-and-recovery-balance",
+            "title": "Fitness and recovery balance",
+            "skillName": "Conditioning balance",
+            "skillArea": "Confidence building",
+            "focus": "Match work, conditioning, and rest to a high-drive young adult body.",
             "steps": [
-                "Use a quiet sniff walk or long-line wander before skills work.",
-                "Avoid busy dog parks and tight footpaths on high-energy days.",
-                "Reward voluntary disengagement from movement, dogs, bikes, and people.",
+                "Alternate intense training days with lower-impact sniffing or search days.",
+                "Watch for sloppy movement, slower responses, or irritability as fatigue signals.",
+                "Keep jumping and hard turns appropriate for his conditioning and vet guidance.",
             ],
         },
         {
-            "title": "Short settle reps",
-            "focus": "Teach recovery as a skill, especially after excitement.",
+            "id": "advanced-neutrality-practice",
+            "title": "Advanced neutrality practice",
+            "skillName": "Neutrality",
+            "skillArea": "Life skills",
+            "focus": "Maintain calm around dogs, people, traffic, and movement without requiring greetings.",
             "steps": [
-                "Practise mat or place work for 30 to 90 seconds at a time.",
-                "Pay for relaxed hips, slow breathing, and head turns back to you.",
-                "Release him while he is calm so the pattern stays easy.",
+                "Choose one everyday distraction and work at a distance where he can stay loose.",
+                "Reward check-ins, quiet observation, and disengagement.",
+                "End before he gets bored or starts inventing his own job.",
             ],
         },
         {
-            "title": "Pattern games around triggers",
-            "focus": "Predictable food patterns can lower arousal without forcing confrontation.",
+            "id": "toy-rules-for-drive",
+            "title": "Toy rules for drive",
+            "skillName": "Toy control",
+            "skillArea": "Obedience",
+            "focus": "Use tug and fetch to build control, not just intensity.",
             "steps": [
-                "Use one-two-three treat or find-it scatters at safe distance.",
-                "Let him turn away after each repetition instead of staring longer.",
-                "Increase difficulty by location, duration, or distance, one variable at a time.",
+                "Ask for a short start behavior before the toy appears.",
+                "Practise drop, re-grip, and restart with calm timing.",
+                "Finish with food scatters or sniffing so drive has an off-ramp.",
             ],
         },
         {
-            "title": "Recovery audit",
-            "focus": "A reactive working-line puppy needs sleep and quiet as much as training.",
+            "id": "real-world-settle",
+            "title": "Real-world settle",
+            "skillName": "Public settle",
+            "skillArea": "Life skills",
+            "focus": "Turn maturity into practical calm in cafes, parks, friends' homes, or training fields.",
             "steps": [
-                "Track the day after big outings; reactivity often rises when recovery is short.",
-                "Use food puzzles or calm chewing after walks to downshift.",
-                "Choose one training goal per outing so sessions stay clean.",
+                "Bring a mat and start in a low-traffic corner.",
+                "Reward relaxed body shifts, chin downs, and quiet observation.",
+                "Leave after a successful short session instead of stretching until failure.",
             ],
         },
     ]
+
+
+def _with_training_tip_metadata(tip: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
     return {
         "categoryId": "dogTraining",
         "label": "Dog Training",
-        "description": "Daily coaching for a reactive, overstimulated 9-month working-line German Shepherd.",
-        **tips[day_index],
-        "note": "If reactions escalate, work with a qualified force-free behaviour professional.",
+        "description": (
+            f"Training tips for this {profile['ageLabel']} working-line GSD, "
+            f"tuned for {profile['stageLabel']}."
+        ),
+        "ageMonths": profile["ageMonths"],
+        "ageDays": profile["ageDays"],
+        "ageLabel": profile["ageLabel"],
+        "stageLabel": profile["stageLabel"],
+        **tip,
+        "note": "Keep sessions short, reward-based, and matched to health, energy, and recovery.",
     }
 
 
 def _daily_rotation_index(now: datetime, item_count: int) -> int:
-    local_date = now.astimezone(_melbourne_timezone()).date()
+    local_date = _local_melbourne_date(now)
     return (local_date - BOOK_ROTATION_EPOCH).days % item_count
+
+
+def _build_training_tips(now: datetime) -> list[dict[str, Any]]:
+    profile = _dog_training_profile(now)
+    tips = _training_tip_catalog(int(profile["ageMonths"]))
+    day_index = _daily_rotation_index(now, len(tips))
+    ordered_tips = [*tips[day_index:], *tips[:day_index]]
+    return [_with_training_tip_metadata(tip, profile) for tip in ordered_tips]
+
+
+def _build_training_tip(now: datetime) -> dict[str, Any]:
+    return _build_training_tips(now)[0]
 
 
 def _build_book_of_the_day(now: datetime) -> dict[str, Any]:
@@ -638,13 +1080,15 @@ def get_news_dashboard() -> dict[str, Any]:
             }
         )
 
+    training_tips = _build_training_tips(now)
     payload = {
         "source": "rss",
         "generatedAt": now.isoformat(),
         "timezone": "Australia/Melbourne",
         "categories": categories,
         "bookOfTheDay": _build_book_of_the_day(now),
-        "trainingTip": _build_training_tip(now),
+        "trainingTip": training_tips[0],
+        "trainingTips": training_tips,
         "error": None,
     }
     _news_cache = dict(payload)

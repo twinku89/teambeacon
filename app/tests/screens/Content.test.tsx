@@ -295,11 +295,13 @@ describe("Content", () => {
         trainingTip: {
           categoryId: "dogTraining",
           label: "Dog Training",
-          description: "Daily coaching for a reactive, overstimulated 9-month working-line German Shepherd.",
-          title: "Distance-first trigger work",
-          focus: "Keep him far enough from triggers that he can still think.",
-          steps: ["Reward calm check-ins.", "Move away before intensity builds."],
-          note: "Work with a qualified professional if reactions escalate.",
+          description: "Training tips for this 9-month-old working-line GSD, tuned for adolescent working-line foundations.",
+          title: "Engagement check-ins",
+          skillName: "Voluntary check-in",
+          skillArea: "Life skills",
+          focus: "Teach your adolescent working-line GSD that checking in is always worth it.",
+          steps: ["Reward calm check-ins.", "Resume walking after each reward."],
+          note: "Keep sessions short, reward-based, and matched to health, energy, and recovery.",
         },
         error: null,
       },
@@ -310,7 +312,7 @@ describe("Content", () => {
     expect(await screen.findByRole("heading", { name: "Daily Briefing", level: 2 })).toBeInTheDocument();
     expect(await screen.findByText("World headline")).toBeInTheDocument();
     expect(screen.getByText("Atomic Habits")).toBeInTheDocument();
-    expect(screen.getByText("Distance-first trigger work")).toBeInTheDocument();
+    expect(screen.getByText("Engagement check-ins")).toBeInTheDocument();
     expect(screen.getByText("Illuminating Engineering Insights")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Integrations Settings" })).not.toBeInTheDocument();
 
