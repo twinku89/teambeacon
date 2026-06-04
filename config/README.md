@@ -47,7 +47,7 @@
 - `OCI_GENAI_MODEL_ID` (required, e.g. `cohere.command-r-08-2024`)
 - `OCI_GENAI_CONFIG_PROFILE` (default: `DEFAULT`)
 - `OCI_GENAI_CONFIG_FILE` (default: `~/.oci/config`)
-- `OCI_GENAI_MAX_TOKENS` (default: `600`)
+- `OCI_GENAI_MAX_TOKENS` (default: `1000`)
 - `OCI_GENAI_TEMPERATURE` (default: `1`)
 - `OCI_GENAI_TOP_P` (default: `0.75`)
 - `OCI_GENAI_TOP_K` (default: `0`)

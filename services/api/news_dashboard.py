@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import os
 import re
+import socket
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -43,6 +44,13 @@ FEEDS: tuple[NewsFeed, ...] = (
         "Global headlines from BBC News.",
         "BBC News",
         "https://feeds.bbci.co.uk/news/world/rss.xml",
+    ),
+    NewsFeed(
+        "world",
+        "World News",
+        "Global headlines from BBC News and The Guardian.",
+        "The Guardian",
+        "https://www.theguardian.com/world/rss",
     ),
     NewsFeed(
         "australia",
@@ -210,6 +218,31 @@ def _matches_keywords(article: dict[str, Any], keywords: tuple[str, ...]) -> boo
     return any(keyword.lower() in haystack for keyword in keywords)
 
 
+def _is_dns_error(reason: Any) -> bool:
+    reason_errno = getattr(reason, "errno", None)
+    if reason_errno in {socket.EAI_AGAIN, socket.EAI_NONAME}:
+        return True
+    reason_text = str(reason).lower()
+    return any(
+        marker in reason_text
+        for marker in (
+            "nodename nor servname",
+            "name or service not known",
+            "temporary failure in name resolution",
+            "no address associated with hostname",
+        )
+    )
+
+
+def _feed_request_error(feed: NewsFeed, reason: Any) -> str:
+    if _is_dns_error(reason):
+        return (
+            f"{feed.source} feed is temporarily unavailable because the RSS host could not be resolved. "
+            "Check network or DNS and refresh."
+        )
+    return f"{feed.source} feed is temporarily unavailable. Try refreshing again shortly."
+
+
 def _fetch_feed(feed: NewsFeed) -> tuple[NewsFeed, list[dict[str, Any]], str | None]:
     timeout = int(os.environ.get("NEWS_DASHBOARD_TIMEOUT_SECONDS", str(NEWS_TIMEOUT_SECONDS)))
     request = Request(feed.url, headers={"User-Agent": "TeamBeacon/1.0 news dashboard"})
@@ -219,7 +252,7 @@ def _fetch_feed(feed: NewsFeed) -> tuple[NewsFeed, list[dict[str, Any]], str | N
     except HTTPError as exc:
         return feed, [], f"{feed.source} returned HTTP {exc.code}."
     except URLError as exc:
-        return feed, [], f"{feed.source} request failed: {exc.reason}"
+        return feed, [], _feed_request_error(feed, exc.reason)
     except TimeoutError:
         return feed, [], f"{feed.source} request timed out."
 

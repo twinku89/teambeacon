@@ -41,6 +41,17 @@ class OciGenAiConfigUnitTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             OciGenAiRuntimeConfig.from_env(env={})
 
+    def test_from_env_defaults_to_shared_answer_budget(self) -> None:
+        runtime = OciGenAiRuntimeConfig.from_env(
+            env={
+                "OCI_GENAI_COMPARTMENT_ID": "ocid1.compartment.oc1..example",
+                "OCI_GENAI_ENDPOINT": "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com",
+                "OCI_GENAI_MODEL_ID": "cohere.command-r-08-2024",
+            }
+        )
+
+        self.assertEqual(runtime.max_tokens, 1000)
+
 
 if __name__ == "__main__":
     unittest.main()

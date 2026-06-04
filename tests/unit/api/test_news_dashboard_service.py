@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import unittest
+import socket
 from datetime import datetime, timedelta, timezone
+from urllib.error import URLError
 from unittest.mock import patch
 
 from services.api import news_dashboard
@@ -71,6 +73,25 @@ class NewsDashboardServiceTests(unittest.TestCase):
         payload = news_dashboard.get_news_dashboard()
 
         self.assertTrue(payload["cached"])
+
+    def test_fetch_feed_sanitizes_dns_errors(self) -> None:
+        feed = news_dashboard.NewsFeed(
+            "world",
+            "World News",
+            "Global headlines.",
+            "BBC News",
+            "https://feeds.bbci.co.uk/news/world/rss.xml",
+        )
+        dns_error = socket.gaierror(socket.EAI_NONAME, "nodename nor servname provided, or not known")
+
+        with patch.object(news_dashboard, "urlopen", side_effect=URLError(dns_error)):
+            _, articles, error = news_dashboard._fetch_feed(feed)  # noqa: SLF001
+
+        self.assertEqual([], articles)
+        self.assertIsNotNone(error)
+        self.assertIn("RSS host could not be resolved", error or "")
+        self.assertNotIn("nodename nor servname", error or "")
+        self.assertNotIn("[Errno 8]", error or "")
 
     def test_book_rotation_is_stable_per_day_without_short_repeats(self) -> None:
         start = datetime(2026, 6, 1, 1, 0, tzinfo=timezone.utc)

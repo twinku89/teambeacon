@@ -12,7 +12,7 @@ class OciGenAiRuntimeConfig:
     model_id: str
     config_profile: str = "DEFAULT"
     config_file_path: str = "~/.oci/config"
-    max_tokens: int = 600
+    max_tokens: int = 1000
     temperature: float = 1.0
     top_p: float = 0.75
     top_k: int = 0
@@ -38,7 +38,7 @@ class OciGenAiRuntimeConfig:
             model_id=source["OCI_GENAI_MODEL_ID"],
             config_profile=source.get("OCI_GENAI_CONFIG_PROFILE", "DEFAULT"),
             config_file_path=source.get("OCI_GENAI_CONFIG_FILE", "~/.oci/config"),
-            max_tokens=int(source.get("OCI_GENAI_MAX_TOKENS", "600")),
+            max_tokens=int(source.get("OCI_GENAI_MAX_TOKENS", "1000")),
             temperature=float(source.get("OCI_GENAI_TEMPERATURE", "1")),
             top_p=float(source.get("OCI_GENAI_TOP_P", "0.75")),
             top_k=int(source.get("OCI_GENAI_TOP_K", "0")),

@@ -109,6 +109,13 @@ Expected key checks:
     2. Verify `OCI_GENAI_CONFIG_PROFILE` section exists in that file.
     3. Verify key file path in OCI config is valid.
 
+- `OCI session token for profile ... expired`
+  - Fix:
+    ```bash
+    oci session authenticate --profile DEFAULT
+    ```
+  - Use your configured `OCI_GENAI_CONFIG_PROFILE` value when it is not `DEFAULT`, then restart the API.
+
 - `OCI GenAI chat request failed: ...`
   - Typical causes: invalid endpoint, unauthorized profile, blocked model access, wrong compartment OCID.
 

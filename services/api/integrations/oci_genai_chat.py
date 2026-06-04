@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from packages.connectors.jira_config import load_env_files
@@ -38,7 +42,7 @@ def _extract_chat_text(chat_api_response: Any) -> str:
 
 def _load_oci_profile(oci_module: Any, runtime: OciGenAiRuntimeConfig) -> dict[str, Any]:
     try:
-        return oci_module.config.from_file(
+        profile = oci_module.config.from_file(
             runtime.expanded_config_file_path,
             runtime.config_profile,
         )
@@ -47,6 +51,66 @@ def _load_oci_profile(oci_module: Any, runtime: OciGenAiRuntimeConfig) -> dict[s
             "Failed to load OCI config profile "
             f"{runtime.config_profile} from {runtime.config_file_path}: {exc}"
         ) from exc
+    _read_current_security_token(profile, runtime)
+    return profile
+
+
+def _decode_jwt_payload(token: str) -> dict[str, Any] | None:
+    parts = token.split(".")
+    if len(parts) < 2:
+        return None
+
+    try:
+        padded_payload = parts[1] + "=" * (-len(parts[1]) % 4)
+        decoded = base64.urlsafe_b64decode(padded_payload.encode("utf-8")).decode("utf-8")
+        payload = json.loads(decoded)
+    except (binascii.Error, UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return None
+
+    return payload if isinstance(payload, dict) else None
+
+
+def _read_current_security_token(profile: dict[str, Any], runtime: OciGenAiRuntimeConfig) -> str | None:
+    security_token_file = profile.get("security_token_file")
+    if not security_token_file:
+        return None
+
+    token_path = Path(str(security_token_file)).expanduser()
+    try:
+        security_token = token_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise ValueError(f"Failed to read OCI security token file {token_path}: {exc}") from exc
+    if not security_token:
+        raise ValueError(f"OCI security token file is empty: {token_path}")
+
+    payload = _decode_jwt_payload(security_token)
+    expires_at_seconds = payload.get("exp") if payload else None
+    if not isinstance(expires_at_seconds, (int, float)):
+        return security_token
+
+    expires_at = datetime.fromtimestamp(expires_at_seconds, tz=timezone.utc)
+    if datetime.now(timezone.utc) >= expires_at:
+        raise ValueError(
+            f"OCI session token for profile {runtime.config_profile} expired at {expires_at.isoformat()}. "
+            f"Run `oci session authenticate --profile {runtime.config_profile}` and restart the TeamBeacon API."
+        )
+    return security_token
+
+
+def _build_security_token_signer(
+    oci_module: Any,
+    profile: dict[str, Any],
+    runtime: OciGenAiRuntimeConfig,
+) -> Any | None:
+    security_token = _read_current_security_token(profile, runtime)
+    if not security_token:
+        return None
+
+    private_key = oci_module.signer.load_private_key_from_file(
+        str(Path(str(profile["key_file"])).expanduser()),
+        pass_phrase=profile.get("pass_phrase"),
+    )
+    return oci_module.auth.signers.SecurityTokenSigner(security_token, private_key)
 
 
 def get_oci_genai_status() -> dict[str, Any]:
@@ -148,6 +212,7 @@ def chat_with_oci_genai(
     runtime = OciGenAiRuntimeConfig.from_env()
     oci_module = _load_oci_module()
     oci_config = _load_oci_profile(oci_module, runtime)
+    signer = _build_security_token_signer(oci_module, oci_config, runtime)
 
     selected_model_id = model_id.strip() if isinstance(model_id, str) and model_id.strip() else runtime.model_id
     selected_max_tokens = max_tokens if max_tokens is not None else runtime.max_tokens
@@ -156,11 +221,17 @@ def chat_with_oci_genai(
     selected_top_k = top_k if top_k is not None else runtime.top_k
     selected_frequency_penalty = frequency_penalty if frequency_penalty is not None else runtime.frequency_penalty
 
+    client_kwargs: dict[str, Any] = {
+        "config": oci_config,
+        "service_endpoint": runtime.endpoint,
+        "retry_strategy": oci_module.retry.NoneRetryStrategy(),
+        "timeout": (runtime.connect_timeout_seconds, runtime.read_timeout_seconds),
+    }
+    if signer is not None:
+        client_kwargs["signer"] = signer
+
     client = oci_module.generative_ai_inference.GenerativeAiInferenceClient(
-        config=oci_config,
-        service_endpoint=runtime.endpoint,
-        retry_strategy=oci_module.retry.NoneRetryStrategy(),
-        timeout=(runtime.connect_timeout_seconds, runtime.read_timeout_seconds),
+        **client_kwargs,
     )
 
     chat_detail = oci_module.generative_ai_inference.models.ChatDetails()

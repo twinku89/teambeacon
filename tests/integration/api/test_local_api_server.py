@@ -282,7 +282,7 @@ class LocalApiServerIntegrationTests(unittest.TestCase):
                 "response": {"text": "TeamBeacon can summarize sprint risk weekly."},
                 "request": {
                     "message": message,
-                    "maxTokens": max_tokens if max_tokens is not None else 600,
+                    "maxTokens": max_tokens if max_tokens is not None else 1000,
                     "temperature": temperature if temperature is not None else 1.0,
                     "topP": top_p if top_p is not None else 0.75,
                     "topK": top_k if top_k is not None else 0,
@@ -384,7 +384,7 @@ class LocalApiServerIntegrationTests(unittest.TestCase):
                 "response": {"text": "TeamBeacon can summarize sprint risk weekly."},
                 "request": {
                     "message": message,
-                    "maxTokens": max_tokens if max_tokens is not None else 600,
+                    "maxTokens": max_tokens if max_tokens is not None else (1000 if selected == "oci" else 600),
                     "temperature": temperature if temperature is not None else 1.0,
                     "topP": top_p if top_p is not None else 0.75,
                     "topK": top_k if top_k is not None else 0,
