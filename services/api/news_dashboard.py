@@ -741,7 +741,7 @@ def _build_training_tip(now: datetime) -> dict[str, Any]:
     return _build_training_tips(now)[0]
 
 
-def _build_book_of_the_day(now: datetime) -> dict[str, Any]:
+def _book_catalog() -> list[dict[str, Any]]:
     books = [
         {
             "title": "Atomic Habits",
@@ -1047,7 +1047,294 @@ def _build_book_of_the_day(now: datetime) -> dict[str, Any]:
             ],
             "tryToday": "Name one ambiguity your team is carrying and decide who owns clearing it.",
         },
+        {
+            "title": "Factfulness",
+            "author": "Hans Rosling, Ola Rosling, and Anna Rosling Ronnlund",
+            "summary": "A clear guide to reading the world with better data and fewer dramatic assumptions.",
+            "whyRead": "Useful when headlines make the world feel simpler, scarier, or more divided than it is.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "Factfulness is about replacing reflexive pessimism and snap judgments with a calmer habit of "
+                "checking proportions, trends, and base rates. The authors describe common instincts that distort "
+                "how people read the world: dividing everything into two camps, noticing only bad news, assuming "
+                "straight-line trends, or blaming a single cause. The book is not naive optimism. It asks you to "
+                "look at data carefully enough to notice both progress and real problems. That makes it useful for "
+                "general knowledge because it gives a practical mental toolkit for news, policy, health, economics, "
+                "and global development. The everyday lesson is simple: before reacting, ask what the comparison "
+                "set is, whether the trend is changing, and what the data actually says."
+            ),
+            "keyIdeas": [
+                "Check trends and proportions before trusting a dramatic impression.",
+                "Avoid dividing complex issues into only two groups.",
+                "Progress and serious problems can both be true at the same time.",
+                "Use data as a thinking aid, not as decoration for a fixed opinion.",
+            ],
+            "tryToday": "Pick one surprising headline and look for the long-term trend behind it.",
+        },
+        {
+            "title": "A Short History of Nearly Everything",
+            "author": "Bill Bryson",
+            "summary": "An accessible tour through science, discovery, geology, biology, and the scale of deep time.",
+            "whyRead": "Good for widening general knowledge without turning the morning read into homework.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "A Short History of Nearly Everything is a broad, readable journey through how humans came to "
+                "understand the universe, Earth, life, and ourselves. Bryson moves from atoms and astronomy to "
+                "fossils, volcanoes, oceans, cells, and extinction, often pausing on the strange human stories "
+                "behind scientific discoveries. The value of the book is not memorising facts. It helps you feel "
+                "the scale of things: how old the planet is, how recent humans are, how much luck and observation "
+                "sit behind ordinary knowledge, and how much remains unknown. It is a good Daily Briefing pick "
+                "because it gives the day a wider frame than tasks and tickets. A few pages can make familiar life "
+                "feel freshly improbable."
+            ),
+            "keyIdeas": [
+                "Scientific knowledge is built from curiosity, error, rivalry, and patient evidence.",
+                "Deep time changes how ordinary human concerns feel.",
+                "The natural world is both more fragile and more astonishing than it appears.",
+                "Good explanations make complex ideas easier without making them shallow.",
+            ],
+            "tryToday": "Learn one fact about the age, scale, or origin of something you use every day.",
+        },
+        {
+            "title": "Sapiens",
+            "author": "Yuval Noah Harari",
+            "summary": "A sweeping history of how humans built shared stories, societies, economies, and institutions.",
+            "whyRead": "Useful for connecting everyday systems to longer patterns in culture and history.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "Sapiens looks at human history through big shifts: cognitive, agricultural, imperial, scientific, "
+                "and economic. One of its central ideas is that humans coordinate at scale through shared stories: "
+                "money, nations, companies, laws, rights, and institutions all depend on collective belief. The book "
+                "is intentionally broad, so it is best read as a set of lenses rather than a final answer to every "
+                "historical debate. Its strength for general knowledge is that it connects biology, myth, economics, "
+                "power, and technology into one conversation. It helps you ask why certain systems feel inevitable "
+                "when they are actually built, maintained, and changed by people."
+            ),
+            "keyIdeas": [
+                "Shared stories let humans cooperate at very large scale.",
+                "History often changes through new systems of belief and coordination.",
+                "Progress can create new tradeoffs rather than only solving old problems.",
+                "Institutions feel solid because many people keep acting as if they are.",
+            ],
+            "tryToday": "Notice one invisible shared agreement that quietly shapes your day.",
+        },
+        {
+            "title": "Prisoners of Geography",
+            "author": "Tim Marshall",
+            "summary": "A geopolitical primer on how mountains, rivers, seas, borders, and resources shape nations.",
+            "whyRead": "Helpful when world news needs more map-awareness and less noise.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "Prisoners of Geography explains international politics through the physical constraints that "
+                "countries operate within. Geography is not destiny, but it shapes incentives: ports matter, energy "
+                "routes matter, mountains protect and divide, and flat plains can make borders feel exposed. The book "
+                "is useful because it brings a map back into world news. Conflicts, alliances, trade routes, and "
+                "security decisions often make more sense when you ask what terrain, resources, and access points are "
+                "in play. It is a good general-knowledge rotation book because it turns abstract foreign policy into "
+                "something more concrete and spatial."
+            ),
+            "keyIdeas": [
+                "Geography influences national choices even when leaders change.",
+                "Ports, choke points, borders, energy routes, and terrain shape strategy.",
+                "Maps can explain why some problems keep returning.",
+                "Geography is a constraint, not a complete explanation.",
+            ],
+            "tryToday": "Open a map for one world-news story and identify the nearest border, port, or route that matters.",
+        },
+        {
+            "title": "The Art of Travel",
+            "author": "Alain de Botton",
+            "summary": "A reflective book on why we travel, what we notice, and how places change attention.",
+            "whyRead": "Good when you want travel inspiration that is thoughtful rather than checklist-driven.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "The Art of Travel treats travel as a way of paying attention, not only a way of moving between "
+                "destinations. De Botton explores anticipation, curiosity, beauty, unfamiliarity, art, hotels, "
+                "landscapes, and the strange fact that we carry our own moods with us wherever we go. The book is "
+                "useful because it makes travel less about collecting places and more about changing how you see. "
+                "It also works when you are not travelling. A commuter street, local cafe, or park can become more "
+                "interesting when approached with the attention people usually reserve for somewhere far away. For "
+                "a Daily Briefing, it adds a softer, more observant rhythm to the morning."
+            ),
+            "keyIdeas": [
+                "Travel changes attention as much as location.",
+                "Anticipation and memory are part of the journey.",
+                "Unfamiliar places can reveal familiar habits.",
+                "You can practise a traveller's attention close to home.",
+            ],
+            "tryToday": "Look at one familiar route as if you were visiting it for the first time.",
+        },
+        {
+            "title": "The Geography of Bliss",
+            "author": "Eric Weiner",
+            "summary": "A travel memoir that explores how different cultures understand happiness and meaning.",
+            "whyRead": "Good for mixing travel, culture, and personal reflection in a light but thoughtful way.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "The Geography of Bliss follows a search for what happiness looks like in different places. Weiner "
+                "uses travel writing, interviews, humour, and social observation to compare how culture shapes "
+                "contentment. The point is not that one country has solved happiness. It is that environment, "
+                "expectations, relationships, trust, pace, money, weather, and public life all influence what people "
+                "call a good life. The book is useful for personal development because it makes happiness feel less "
+                "like a private productivity project and more like a relationship between habits, community, place, "
+                "and values. It is also a pleasant reminder that travel can be a way to question your defaults."
+            ),
+            "keyIdeas": [
+                "Different cultures define and support happiness differently.",
+                "Place, trust, pace, and relationships shape wellbeing.",
+                "Travel can reveal assumptions you did not know you had.",
+                "Happiness is not only an individual optimization problem.",
+            ],
+            "tryToday": "Borrow one small wellbeing habit from another culture and try it without over-engineering it.",
+        },
+        {
+            "title": "In Patagonia",
+            "author": "Bruce Chatwin",
+            "summary": "A classic travel narrative built from fragments, encounters, landscape, myth, and memory.",
+            "whyRead": "Useful when you want a more literary travel pick that feels different from advice books.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "In Patagonia is less a conventional itinerary and more a collage of place, story, rumour, and "
+                "encounter. Chatwin moves through remote landscapes and eccentric histories, collecting fragments "
+                "that make Patagonia feel both real and mythic. The book's value is its texture. It shows travel "
+                "writing as attention to landscape, voice, silence, and odd human detail rather than a list of "
+                "recommendations. In the Daily Briefing rotation, it breaks the pattern of practical nonfiction and "
+                "adds a little wonder. It is a reminder that not every useful book needs to tell you how to improve; "
+                "some widen the imagination by taking you somewhere unfamiliar."
+            ),
+            "keyIdeas": [
+                "A place can be understood through fragments and encounters.",
+                "Travel writing can preserve mystery instead of explaining everything.",
+                "Landscape shapes the mood and memory of a story.",
+                "Curiosity can be a valid reason to read.",
+            ],
+            "tryToday": "Write three observations about a place without turning them into advice.",
+        },
+        {
+            "title": "The Psychology of Money",
+            "author": "Morgan Housel",
+            "summary": "A practical look at how behavior, risk, luck, and time shape financial decisions.",
+            "whyRead": "Useful personal finance without turning money into spreadsheets only.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "The Psychology of Money argues that financial success depends heavily on behavior. Knowledge "
+                "matters, but patience, humility, risk awareness, and emotional control often matter more. Housel "
+                "explains why two people can make different financial choices because they lived through different "
+                "histories, why compounding needs time and restraint, and why enough is a powerful concept. The book "
+                "is useful for personal development because it frames money as part of life design: security, "
+                "flexibility, independence, and peace of mind. It encourages decisions that survive uncertainty "
+                "instead of decisions that look clever only in hindsight."
+            ),
+            "keyIdeas": [
+                "Personal finance is deeply behavioral.",
+                "Compounding rewards time, restraint, and consistency.",
+                "Knowing what is enough protects better decisions.",
+                "Good plans leave room for uncertainty and mistakes.",
+            ],
+            "tryToday": "Name one money decision where peace of mind matters more than optimization.",
+        },
+        {
+            "title": "Range",
+            "author": "David Epstein",
+            "summary": "A case for broad learning, experimentation, and connecting ideas across domains.",
+            "whyRead": "Good when personal growth feels too narrowly optimized.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "Range challenges the idea that early specialization is always the best path. Epstein argues that "
+                "many complex fields reward breadth, experimentation, analogical thinking, and the ability to move "
+                "ideas between domains. The book does not reject expertise. It says that in uncertain or messy "
+                "environments, people often benefit from sampling widely before narrowing, and from keeping enough "
+                "range to recognize patterns others miss. As a personal-development pick, it gives permission to "
+                "learn beyond the immediate job title or current goal. It fits a Daily Briefing because it nudges "
+                "the reader toward curiosity, cross-training, and less anxious comparison."
+            ),
+            "keyIdeas": [
+                "Broad sampling can improve judgment in complex environments.",
+                "Analogies help transfer ideas between fields.",
+                "Late specialization can still produce strong expertise.",
+                "Curiosity outside your lane can become practical advantage.",
+            ],
+            "tryToday": "Connect one idea from a hobby, book, or trip to a current problem.",
+        },
+        {
+            "title": "Braiding Sweetgrass",
+            "author": "Robin Wall Kimmerer",
+            "summary": "A blend of ecology, Indigenous knowledge, science, gratitude, and attention to the living world.",
+            "whyRead": "Good for a calmer nature-and-perspective day in the reading rotation.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "Braiding Sweetgrass brings together botany, Indigenous wisdom, teaching, motherhood, restoration, "
+                "and gratitude. Kimmerer writes about plants and ecosystems with scientific precision and emotional "
+                "generosity, asking what it would mean to relate to the natural world through reciprocity rather "
+                "than extraction alone. The book is a useful counterweight to productivity-heavy reading because it "
+                "slows attention down. It makes ordinary plants, seasons, gifts, waste, and care feel ethically and "
+                "beautifully connected. For the Daily Briefing, it adds nature, reflection, and a more grounded way "
+                "to think about responsibility."
+            ),
+            "keyIdeas": [
+                "Science and traditional knowledge can deepen each other.",
+                "Reciprocity changes how responsibility feels.",
+                "Attention is a form of respect.",
+                "Gratitude can be practical, not sentimental.",
+            ],
+            "tryToday": "Notice one living thing you usually pass without naming or thanking.",
+        },
+        {
+            "title": "The Creative Act",
+            "author": "Rick Rubin",
+            "summary": "A reflective guide to creativity as attention, receptivity, practice, and editing.",
+            "whyRead": "Useful when you want a creative reset without making creativity feel corporate.",
+            "readingTimeMinutes": 5,
+            "detailedSummary": (
+                "The Creative Act treats creativity less as a rare talent and more as a way of being available to "
+                "ideas. Rubin writes about attention, taste, patience, experimentation, editing, and the value of "
+                "making space for signal to appear. The book is not a step-by-step system; it is more like a set of "
+                "meditations for people who make things. In a mixed Book of the Day rotation, it helps balance "
+                "practical work books with something more inward and imaginative. Its daily usefulness is simple: "
+                "create conditions where you notice more, judge a little later, and keep refining what feels alive."
+            ),
+            "keyIdeas": [
+                "Creativity starts with attention and receptivity.",
+                "Taste develops through making, listening, and revising.",
+                "Editing is part of creation, not the opposite of it.",
+                "Space and quiet can improve the quality of ideas.",
+            ],
+            "tryToday": "Spend ten minutes collecting ideas before judging whether any of them are good.",
+        },
     ]
+
+    topics_by_title = {
+        "Atomic Habits": "Personal development",
+        "Deep Work": "Productivity",
+        "Team Topologies": "Work & leadership",
+        "The Design of Everyday Things": "Design & creativity",
+        "Decoding Your Dog": "Dog training",
+        "Accelerate": "Work & leadership",
+        "Thinking in Systems": "General knowledge",
+        "The Staff Engineer's Path": "Work & leadership",
+        "A Philosophy of Software Design": "Work & leadership",
+        "Turn the Ship Around!": "Work & leadership",
+        "The Pragmatic Programmer": "Work & leadership",
+        "The Manager's Path": "Work & leadership",
+        "Factfulness": "General knowledge",
+        "A Short History of Nearly Everything": "General knowledge",
+        "Sapiens": "General knowledge",
+        "Prisoners of Geography": "General knowledge",
+        "The Art of Travel": "Travel",
+        "The Geography of Bliss": "Travel",
+        "In Patagonia": "Travel",
+        "The Psychology of Money": "Personal finance",
+        "Range": "Personal development",
+        "Braiding Sweetgrass": "Nature",
+        "The Creative Act": "Design & creativity",
+    }
+    for book in books:
+        book["topic"] = topics_by_title.get(book["title"], "General reading")
+    return books
+
+
+def _build_book_of_the_day(now: datetime) -> dict[str, Any]:
+    books = _book_catalog()
     day_index = _daily_rotation_index(now, len(books))
     selected = dict(books[day_index])
     selected["label"] = "Book of the Day"

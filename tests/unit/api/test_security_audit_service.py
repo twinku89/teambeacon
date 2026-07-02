@@ -261,6 +261,230 @@ class SecurityAuditServiceUnitTests(unittest.TestCase):
         self.assertEqual(findings[0]["id"], "GHSA-ph9p-34f9-6g65")
         self.assertEqual(findings[0]["packageName"], "tmp")
 
+    def test_attach_jira_cards_templates_create_url_from_sample_issue_and_current_sprint(self) -> None:
+        findings = [
+            {
+                "layer": "Backend",
+                "id": "CVE-2026-45205",
+                "severity": "MEDIUM",
+                "packageName": "org.apache.commons/commons-configuration2",
+                "installedVersion": "2.11.0",
+                "title": "Uncontrolled Recursion vulnerability in Apache Commons.",
+                "status": "FAILED",
+            }
+        ]
+        jira_config = JiraRuntimeConfig(
+            base_url="https://jira.example.com",
+            pat_token="jira-token",
+            project_key="REV",
+            board_id=27191,
+            story_points_field="customfield_10016",
+        )
+        jira_sample_issue = {
+            "fields": {
+                "project": {"id": "19824", "key": "REV"},
+                "issuetype": {"id": "7", "name": "Story"},
+                "labels": ["security-template"],
+                "components": [{"id": "44556", "name": "Security"}],
+                "customfield_11901": {"id": "90001", "value": "Dependency - Other"},
+                "customfield_17971": {"id": "90002", "value": "Feature"},
+                "customfield_14504": {"id": "90003", "value": "Planned"},
+                "customfield_18820": {"id": "90004", "value": "Aconex"},
+                "customfield_10902": "REV-4829",
+                "customfield_10901": [{"id": 999999, "name": "Template Sprint"}],
+            }
+        }
+
+        def fake_jira_request(path: str, params: dict[str, object] | None = None) -> dict[str, object]:
+            if path == "/rest/api/2/issue/REV-5404":
+                return jira_sample_issue
+            if path == "/rest/agile/1.0/board/27191/sprint":
+                return {"values": [{"id": 121648, "name": "Current Sprint", "state": "active"}]}
+            if path == "/rest/api/2/search":
+                return {"issues": []}
+            return {}
+
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "services.api.integrations.security_audit.JiraRuntimeConfig.from_env",
+            return_value=jira_config,
+        ), patch("services.api.integrations.security_audit.JiraRestConnector") as connector_cls:
+            connector_cls.return_value._request_json.side_effect = fake_jira_request
+
+            security_audit._attach_jira_cards(findings)  # noqa: SLF001
+
+        create_url = findings[0]["jiraCreateUrl"]
+        self.assertIsNone(findings[0]["jiraCard"])
+        self.assertIn("CreateIssueDetails!init.jspa", create_url)
+        self.assertIn("pid=19824", create_url)
+        self.assertIn("issuetype=7", create_url)
+        self.assertIn("labels=security-template", create_url)
+        self.assertIn("components=44556", create_url)
+        self.assertIn("customfield_11901=90001", create_url)
+        self.assertIn("customfield_17971=90002", create_url)
+        self.assertIn("customfield_14504=90003", create_url)
+        self.assertIn("customfield_18820=90004", create_url)
+        self.assertIn("customfield_10902=REV-4829", create_url)
+        self.assertIn("customfield_10901=121648", create_url)
+        self.assertNotIn("999999", create_url)
+
+    def test_attach_jira_cards_builds_create_url_when_sample_issue_is_missing(self) -> None:
+        findings = [
+            {
+                "layer": "Backend",
+                "id": "CVE-2026-45205",
+                "severity": "MEDIUM",
+                "packageName": "org.apache.commons/commons-configuration2",
+                "installedVersion": "2.11.0",
+                "title": "Uncontrolled Recursion vulnerability in Apache Commons.",
+                "status": "FAILED",
+            }
+        ]
+        jira_config = JiraRuntimeConfig(
+            base_url="https://jira.example.com",
+            pat_token="jira-token",
+            project_key="SEC",
+            board_id=27191,
+            story_points_field="customfield_10016",
+        )
+
+        def fake_jira_request(path: str, params: dict[str, object] | None = None) -> dict[str, object]:
+            if path == "/rest/api/2/issue/REV-5404":
+                raise security_audit.JiraAPIError("sample issue not found", status_code=404)
+            if path == "/rest/api/2/project/SEC":
+                return {
+                    "id": "19824",
+                    "key": "SEC",
+                    "issueTypes": [
+                        {"id": "5", "name": "Sub-task", "subtask": True},
+                        {"id": "7", "name": "Story", "subtask": False},
+                    ],
+                }
+            if path == "/rest/agile/1.0/board/27191/sprint":
+                return {"values": [{"id": 121648, "name": "Active Sprint", "state": "active"}]}
+            if path == "/rest/api/2/search":
+                return {"issues": []}
+            return {}
+
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "services.api.integrations.security_audit.JiraRuntimeConfig.from_env",
+            return_value=jira_config,
+        ), patch("services.api.integrations.security_audit.JiraRestConnector") as connector_cls:
+            connector_cls.return_value._request_json.side_effect = fake_jira_request
+
+            security_audit._attach_jira_cards(findings)  # noqa: SLF001
+
+        self.assertIsNone(findings[0]["jiraCard"])
+        self.assertIn("CreateIssueDetails!init.jspa", findings[0]["jiraCreateUrl"])
+        self.assertIn("pid=19824", findings[0]["jiraCreateUrl"])
+        self.assertIn("issuetype=7", findings[0]["jiraCreateUrl"])
+        self.assertIn("assignee=-1", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_11901=82266", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_17971=77085", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_14504=76800", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_18820=65005", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_10902=REV-4829", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_10901=121648", findings[0]["jiraCreateUrl"])
+
+    def test_attach_jira_cards_uses_create_meta_when_project_issue_types_are_missing(self) -> None:
+        findings = [
+            {
+                "layer": "Trivy Scan",
+                "id": "CVE-2026-33416",
+                "severity": "HIGH",
+                "packageName": "libpng",
+                "installedVersion": "2:1.6.37-12.el9_7.3",
+                "title": "libpng vulnerability",
+                "status": "FAILED",
+            }
+        ]
+        jira_config = JiraRuntimeConfig(
+            base_url="https://jira.example.com",
+            pat_token="jira-token",
+            project_key="SEC",
+            board_id=None,
+            story_points_field="customfield_10016",
+        )
+
+        def fake_jira_request(path: str, params: dict[str, object] | None = None) -> dict[str, object]:
+            if path == "/rest/api/2/issue/REV-5404":
+                raise security_audit.JiraAPIError("sample issue not found", status_code=404)
+            if path == "/rest/api/2/project/SEC":
+                return {"id": "19824", "key": "SEC"}
+            if path == "/rest/api/2/issue/createmeta":
+                return {
+                    "projects": [
+                        {
+                            "id": "19824",
+                            "key": "SEC",
+                            "issuetypes": [
+                                {"id": "3", "name": "Task", "subtask": False},
+                                {"id": "7", "name": "Story", "subtask": False},
+                            ],
+                        }
+                    ]
+                }
+            if path == "/rest/api/2/search":
+                return {"issues": []}
+            return {}
+
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "services.api.integrations.security_audit.JiraRuntimeConfig.from_env",
+            return_value=jira_config,
+        ), patch("services.api.integrations.security_audit.JiraRestConnector") as connector_cls:
+            connector_cls.return_value._request_json.side_effect = fake_jira_request
+
+            security_audit._attach_jira_cards(findings)  # noqa: SLF001
+
+        self.assertIsNone(findings[0]["jiraCard"])
+        self.assertIn("CreateIssueDetails!init.jspa", findings[0]["jiraCreateUrl"])
+        self.assertIn("pid=19824", findings[0]["jiraCreateUrl"])
+        self.assertIn("issuetype=7", findings[0]["jiraCreateUrl"])
+
+    def test_attach_jira_cards_falls_back_to_default_create_link_when_metadata_is_blocked(self) -> None:
+        findings = [
+            {
+                "layer": "UI",
+                "id": "GHSA-ph9p-34f9-6g65",
+                "severity": "HIGH",
+                "packageName": "tmp",
+                "installedVersion": "<0.2.6",
+                "title": "tmp has Path Traversal via unsanitized prefix/postfix",
+                "status": "FAILED",
+            }
+        ]
+        jira_config = JiraRuntimeConfig(
+            base_url="https://jira.example.com",
+            pat_token="jira-token",
+            project_key="SEC",
+            board_id=None,
+            story_points_field="customfield_10016",
+        )
+
+        def fake_jira_request(path: str, params: dict[str, object] | None = None) -> dict[str, object]:
+            if path == "/rest/api/2/search":
+                raise security_audit.JiraAPIError("search unauthorized", status_code=401)
+            raise security_audit.JiraAPIError("metadata unavailable", status_code=401)
+
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "services.api.integrations.security_audit.JiraRuntimeConfig.from_env",
+            return_value=jira_config,
+        ), patch("services.api.integrations.security_audit.JiraRestConnector") as connector_cls:
+            connector_cls.return_value._request_json.side_effect = fake_jira_request
+
+            security_audit._attach_jira_cards(findings)  # noqa: SLF001
+
+        self.assertIsNone(findings[0]["jiraCard"])
+        self.assertIn("CreateIssueDetails!init.jspa", findings[0]["jiraCreateUrl"])
+        self.assertIn("pid=19824", findings[0]["jiraCreateUrl"])
+        self.assertIn("issuetype=7", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_11901=82266", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_17971=77085", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_14504=76800", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_18820=65005", findings[0]["jiraCreateUrl"])
+        self.assertIn("customfield_10902=REV-4829", findings[0]["jiraCreateUrl"])
+        self.assertIn("summary=Remediate+High+severity+UI+vulnerability+GHSA-ph9p-34f9-6g65", findings[0]["jiraCreateUrl"])
+        self.assertIn("assignee=-1", findings[0]["jiraCreateUrl"])
+
     def test_returns_pipeline_layers_and_findings(self) -> None:
         runtime = JenkinsRuntimeConfig(
             job_url="https://jenkins.example.com/job/security-audit/",

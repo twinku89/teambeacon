@@ -204,8 +204,11 @@ function BookOfTheDayPanel({ book }: { book: BookOfTheDay }) {
         <span>{book.readingTimeMinutes ? `${book.readingTimeMinutes} min read` : "Daily read"}</span>
       </header>
       <div class="tb-news-book-feature">
-        <strong>{book.title}</strong>
-        <span>{book.author}</span>
+        <div class="tb-news-book-title-row">
+          <strong>{book.title}</strong>
+          {book.topic ? <span class="tb-news-book-topic">{book.topic}</span> : null}
+        </div>
+        <span class="tb-news-book-author">{book.author}</span>
         <p>{book.detailedSummary || book.summary}</p>
         {book.keyIdeas && book.keyIdeas.length > 0 ? (
           <div class="tb-news-book-ideas">

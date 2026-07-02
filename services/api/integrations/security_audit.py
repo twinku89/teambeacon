@@ -6,6 +6,7 @@ import html
 import json
 import os
 import re
+import sqlite3
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -19,6 +20,7 @@ from packages.connectors.jenkins_config import JenkinsRuntimeConfig
 from packages.connectors.jira_config import JiraRuntimeConfig, load_env_files
 from packages.connectors.jira_rest_stub import JiraAPIError, JiraRestConnector
 from packages.connectors.tls import create_ssl_context
+from services.api.integrations.jira_sync import _ensure_schema, _resolve_db_path
 
 DEFAULT_SECURITY_AUDIT_PIPELINE_URL = (
     "https://ci-cloud.us.oracle.com/jenkins/aconex-core-ci-scm/job/blade-runners/job/reviews/"
@@ -30,6 +32,9 @@ JIRA_CARD_SEARCH_LIMIT = 25
 SECURITY_AUDIT_CACHE_SECONDS = 30
 SECURITY_TREND_FINDINGS_CACHE_LIMIT = 20
 DEFAULT_JIRA_CREATE_SAMPLE_ISSUE_KEY = "REV-5404"
+DEFAULT_JIRA_CREATE_PROJECT_ID = "19824"
+DEFAULT_JIRA_CREATE_ISSUE_TYPE_ID = "7"
+DEFAULT_JIRA_CREATE_ISSUE_TYPE_NAME = "Story"
 DEFAULT_JIRA_SECURITY_EPIC_LINK = "REV-4829"
 DEFAULT_JIRA_EPIC_LINK_FIELD = "customfield_10902"
 DEFAULT_JIRA_ACCEPTANCE_CRITERIA_FIELD = "customfield_15812"
@@ -46,6 +51,7 @@ _security_audit_cache: dict[str, Any] | None = None
 _trend_findings_cache: dict[str, list[dict[str, Any]]] = {}
 _trend_findings_cache_order: list[str] = []
 _trend_findings_cache_lock = Lock()
+JiraCreateParamValue = str | list[str]
 
 
 def _utc_iso_now() -> str:
@@ -692,8 +698,17 @@ def _jira_issue_url(base_url: str, issue_key: str) -> str:
     return f"{base_url.rstrip('/')}/browse/{issue_key}"
 
 
-def _jira_create_issue_url(base_url: str, params: dict[str, str]) -> str:
-    return f"{base_url.rstrip('/')}/secure/CreateIssueDetails!init.jspa?{urlencode(params)}"
+def _jira_create_issue_url(base_url: str, params: dict[str, JiraCreateParamValue]) -> str:
+    return f"{base_url.rstrip('/')}/secure/CreateIssueDetails!init.jspa?{urlencode(params, doseq=True)}"
+
+
+def _jira_default_create_issue_url(base_url: str, finding: dict[str, Any]) -> str:
+    params = {
+        "summary": _jira_create_summary(finding),
+        "description": _jira_create_description(finding),
+        "assignee": "-1",
+    }
+    return f"{base_url.rstrip('/')}/secure/CreateIssue!default.jspa?{urlencode(params)}"
 
 
 def _jql_text_literal(value: str) -> str:
@@ -771,14 +786,127 @@ def _jira_issue_priority(raw_issue: dict[str, Any]) -> tuple[int, datetime, date
     return (1 if assignee_name else 0, latest_comment, issue_updated, str(raw_issue.get("key") or ""))
 
 
-def _load_jira_create_template(connector: JiraRestConnector, jira_config: JiraRuntimeConfig) -> dict[str, str] | None:
-    sample_issue_key = os.environ.get("JIRA_SECURITY_CREATE_SAMPLE_KEY", DEFAULT_JIRA_CREATE_SAMPLE_ISSUE_KEY).strip()
-    if not sample_issue_key:
+def _clean_optional_string(value: Any) -> str | None:
+    if isinstance(value, int):
+        return str(value)
+    if not isinstance(value, str):
         return None
+    stripped = value.strip()
+    return stripped or None
 
+
+def _security_template_field_defaults() -> dict[str, str]:
+    return {
+        os.environ.get("JIRA_SECURITY_DEPENDENCY_POSSIBILITIES_FIELD", DEFAULT_JIRA_DEPENDENCY_POSSIBILITIES_FIELD): (
+            os.environ.get("JIRA_SECURITY_DEPENDENCY_OTHER_OPTION", DEFAULT_JIRA_DEPENDENCY_OTHER_OPTION)
+        ),
+        os.environ.get("JIRA_SECURITY_REQUIREMENT_CATEGORY_FIELD", DEFAULT_JIRA_REQUIREMENT_CATEGORY_FIELD): (
+            os.environ.get("JIRA_SECURITY_REQUIREMENT_FEATURE_OPTION", DEFAULT_JIRA_REQUIREMENT_FEATURE_OPTION)
+        ),
+        os.environ.get("JIRA_SECURITY_ACTIVITY_TYPE_FIELD", DEFAULT_JIRA_ACTIVITY_TYPE_FIELD): (
+            os.environ.get("JIRA_SECURITY_ACTIVITY_PLANNED_OPTION", DEFAULT_JIRA_ACTIVITY_PLANNED_OPTION)
+        ),
+        os.environ.get("JIRA_SECURITY_PRODUCT_FIELD", DEFAULT_JIRA_PRODUCT_FIELD): (
+            os.environ.get("JIRA_SECURITY_PRODUCT_ACONEX_OPTION", DEFAULT_JIRA_PRODUCT_ACONEX_OPTION)
+        ),
+        os.environ.get("JIRA_SECURITY_EPIC_LINK_FIELD", DEFAULT_JIRA_EPIC_LINK_FIELD): (
+            os.environ.get("JIRA_SECURITY_EPIC_LINK", DEFAULT_JIRA_SECURITY_EPIC_LINK)
+        ),
+    }
+
+
+def _security_template_field_names() -> tuple[str, ...]:
+    return tuple(_security_template_field_defaults().keys())
+
+
+def _coerce_jira_create_param(value: Any) -> JiraCreateParamValue | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        values = [
+            coerced
+            for item in value
+            if (coerced := _coerce_jira_create_param(item)) is not None
+        ]
+        flattened: list[str] = []
+        for coerced in values:
+            if isinstance(coerced, list):
+                flattened.extend(coerced)
+            else:
+                flattened.append(coerced)
+        return flattened or None
+    if isinstance(value, dict):
+        for key in ("id", "key", "value", "name"):
+            coerced = _clean_optional_string(value.get(key))
+            if coerced:
+                return coerced
+        return None
+    if isinstance(value, (int, float)):
+        return str(value)
+    return _clean_optional_string(value)
+
+
+def _template_params_from_sample_fields(fields: dict[str, Any]) -> dict[str, JiraCreateParamValue]:
+    params: dict[str, JiraCreateParamValue] = {}
+    for field_name in _security_template_field_names():
+        coerced = _coerce_jira_create_param(fields.get(field_name))
+        if coerced is not None:
+            params[field_name] = coerced
+
+    labels = _coerce_jira_create_param(fields.get("labels"))
+    if labels is not None:
+        params["labels"] = labels
+
+    components = _coerce_jira_create_param(fields.get("components"))
+    if components is not None:
+        params["components"] = components
+
+    return params
+
+
+def _default_jira_template_params() -> dict[str, JiraCreateParamValue]:
+    return dict(_security_template_field_defaults())
+
+
+def _template_with_defaults(template: dict[str, Any]) -> dict[str, Any]:
+    params = _default_jira_template_params()
+    sample_params = template.get("_templateParams")
+    if isinstance(sample_params, dict):
+        params.update(sample_params)
+    return {**template, "_templateParams": params}
+
+
+def _default_jira_create_template() -> dict[str, Any] | None:
+    project_id = _clean_optional_string(os.environ.get("JIRA_SECURITY_CREATE_PROJECT_ID")) or DEFAULT_JIRA_CREATE_PROJECT_ID
+    issue_type_id = (
+        _clean_optional_string(os.environ.get("JIRA_SECURITY_CREATE_ISSUE_TYPE_ID"))
+        or DEFAULT_JIRA_CREATE_ISSUE_TYPE_ID
+    )
+    if not project_id or not issue_type_id:
+        return None
+    return _template_with_defaults({"pid": project_id, "issuetype": issue_type_id})
+
+
+def _with_active_sprint(
+    template: dict[str, Any],
+    connector: JiraRestConnector,
+    jira_config: JiraRuntimeConfig,
+) -> dict[str, Any]:
+    sprint_id = _active_sprint_id(connector, jira_config)
+    if sprint_id:
+        template["_activeSprintId"] = sprint_id
+    return template
+
+
+def _load_jira_create_template_from_sample(
+    connector: JiraRestConnector,
+    jira_config: JiraRuntimeConfig,
+    sample_issue_key: str,
+) -> dict[str, Any] | None:
+    template_fields = ",".join(("project", "issuetype", "labels", "components", *_security_template_field_names()))
     payload = connector._request_json(
         f"/rest/api/2/issue/{sample_issue_key}",
-        params={"fields": "project,issuetype"},
+        params={"fields": template_fields},
     )
     fields = payload.get("fields") if isinstance(payload.get("fields"), dict) else {}
     project = fields.get("project") if isinstance(fields.get("project"), dict) else {}
@@ -787,32 +915,179 @@ def _load_jira_create_template(connector: JiraRestConnector, jira_config: JiraRu
     issue_type_id = issue_type.get("id")
     if not isinstance(project_id, str) or not isinstance(issue_type_id, str):
         return None
-    template = {"pid": project_id, "issuetype": issue_type_id}
+    return _with_active_sprint(
+        _template_with_defaults(
+            {
+                "pid": project_id,
+                "issuetype": issue_type_id,
+                "_templateParams": _template_params_from_sample_fields(fields),
+            }
+        ),
+        connector,
+        jira_config,
+    )
+
+
+def _select_jira_create_issue_type_id(issue_types: list[Any]) -> str | None:
+    configured_issue_type_id = _clean_optional_string(os.environ.get("JIRA_SECURITY_CREATE_ISSUE_TYPE_ID"))
+    if configured_issue_type_id:
+        return configured_issue_type_id
+
+    configured_issue_type_name = (
+        _clean_optional_string(os.environ.get("JIRA_SECURITY_CREATE_ISSUE_TYPE_NAME"))
+        or DEFAULT_JIRA_CREATE_ISSUE_TYPE_NAME
+    )
+    for issue_type in issue_types:
+        if not isinstance(issue_type, dict):
+            continue
+        issue_type_id = _clean_optional_string(issue_type.get("id"))
+        issue_type_name = _clean_optional_string(issue_type.get("name"))
+        if issue_type_id and issue_type_name and issue_type_name.lower() == configured_issue_type_name.lower():
+            return issue_type_id
+
+    for issue_type in issue_types:
+        if not isinstance(issue_type, dict):
+            continue
+        issue_type_id = _clean_optional_string(issue_type.get("id"))
+        if issue_type_id and issue_type.get("subtask") is not True:
+            return issue_type_id
+
+    for issue_type in issue_types:
+        if not isinstance(issue_type, dict):
+            continue
+        issue_type_id = _clean_optional_string(issue_type.get("id"))
+        if issue_type_id:
+            return issue_type_id
+    return None
+
+
+def _load_jira_create_template_from_project(
+    connector: JiraRestConnector,
+    jira_config: JiraRuntimeConfig,
+) -> dict[str, Any] | None:
+    configured_project_id = _clean_optional_string(os.environ.get("JIRA_SECURITY_CREATE_PROJECT_ID"))
+    configured_issue_type_id = _clean_optional_string(os.environ.get("JIRA_SECURITY_CREATE_ISSUE_TYPE_ID"))
+    if configured_project_id and configured_issue_type_id:
+        return _with_active_sprint(
+            _template_with_defaults({"pid": configured_project_id, "issuetype": configured_issue_type_id}),
+            connector,
+            jira_config,
+        )
+
+    project_key = (
+        _clean_optional_string(os.environ.get("JIRA_SECURITY_CREATE_PROJECT_KEY"))
+        or _clean_optional_string(jira_config.project_key)
+    )
+    if not project_key:
+        return None
+
     try:
-        sprint_id = _active_sprint_id(connector, jira_config)
+        payload = connector._request_json(f"/rest/api/2/project/{project_key}")
     except JiraAPIError:
-        sprint_id = None
-    if sprint_id:
-        template["_activeSprintId"] = sprint_id
-    return template
+        payload = {}
+    project_id = configured_project_id or _clean_optional_string(payload.get("id"))
+    issue_types = payload.get("issueTypes") if isinstance(payload.get("issueTypes"), list) else []
+    issue_type_id = _select_jira_create_issue_type_id(issue_types)
+    if project_id and issue_type_id:
+        return _with_active_sprint(
+            _template_with_defaults({"pid": project_id, "issuetype": issue_type_id}),
+            connector,
+            jira_config,
+        )
+
+    try:
+        create_meta = connector._request_json(
+            "/rest/api/2/issue/createmeta",
+            params={"projectKeys": project_key, "expand": "projects.issuetypes"},
+        )
+    except JiraAPIError:
+        return None
+    projects = create_meta.get("projects") if isinstance(create_meta.get("projects"), list) else []
+    for project in projects:
+        if not isinstance(project, dict):
+            continue
+        project_id = configured_project_id or _clean_optional_string(project.get("id"))
+        issue_types = project.get("issuetypes") if isinstance(project.get("issuetypes"), list) else []
+        issue_type_id = _select_jira_create_issue_type_id(issue_types)
+        if project_id and issue_type_id:
+            return _with_active_sprint(
+                _template_with_defaults({"pid": project_id, "issuetype": issue_type_id}),
+                connector,
+                jira_config,
+            )
+    return None
+
+
+def _load_jira_create_template(connector: JiraRestConnector, jira_config: JiraRuntimeConfig) -> dict[str, Any] | None:
+    sample_issue_key = os.environ.get("JIRA_SECURITY_CREATE_SAMPLE_KEY", DEFAULT_JIRA_CREATE_SAMPLE_ISSUE_KEY).strip()
+    if sample_issue_key:
+        try:
+            sample_template = _load_jira_create_template_from_sample(connector, jira_config, sample_issue_key)
+        except JiraAPIError:
+            sample_template = None
+        if sample_template:
+            return sample_template
+
+    project_template = _load_jira_create_template_from_project(connector, jira_config)
+    if project_template:
+        return project_template
+
+    default_template = _default_jira_create_template()
+    if default_template:
+        return _with_active_sprint(default_template, connector, jira_config)
+    return None
 
 
 def _active_sprint_id(connector: JiraRestConnector, jira_config: JiraRuntimeConfig) -> str | None:
     if jira_config.board_id is None:
         return None
-    payload = connector._request_json(
-        f"/rest/agile/1.0/board/{jira_config.board_id}/sprint",
-        params={"state": "active", "startAt": 0, "maxResults": 1},
-    )
-    for sprint in payload.get("values") or []:
-        if not isinstance(sprint, dict):
-            continue
-        sprint_id = sprint.get("id")
-        if isinstance(sprint_id, int):
-            return str(sprint_id)
-        if isinstance(sprint_id, str) and sprint_id.strip():
-            return sprint_id.strip()
-    return None
+    try:
+        payload = connector._request_json(
+            f"/rest/agile/1.0/board/{jira_config.board_id}/sprint",
+            params={"state": "active", "startAt": 0, "maxResults": 1},
+        )
+        for sprint in payload.get("values") or []:
+            if not isinstance(sprint, dict):
+                continue
+            sprint_id = sprint.get("id")
+            if isinstance(sprint_id, int):
+                return str(sprint_id)
+            if isinstance(sprint_id, str) and sprint_id.strip():
+                return sprint_id.strip()
+    except JiraAPIError:
+        pass
+    return _local_active_sprint_id(jira_config)
+
+
+def _local_active_sprint_id(jira_config: JiraRuntimeConfig) -> str | None:
+    if jira_config.board_id is None:
+        return None
+    try:
+        conn = sqlite3.connect(_resolve_db_path())
+        try:
+            _ensure_schema(conn)
+            row = conn.execute(
+                """
+                SELECT external_sprint_id
+                FROM sprints
+                WHERE lower(state) = 'active'
+                  AND board_external_id = ?
+                ORDER BY
+                  CASE WHEN start_date IS NULL THEN 1 ELSE 0 END ASC,
+                  datetime(start_date) DESC,
+                  datetime(updated_at) DESC,
+                  external_sprint_id DESC
+                LIMIT 1
+                """,
+                (jira_config.board_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 - local sprint fallback must not block create links.
+        return None
+    if row is None:
+        return None
+    return str(row[0])
 
 
 def _jira_create_summary(finding: dict[str, Any]) -> str:
@@ -851,36 +1126,30 @@ def _jira_create_acceptance_criteria(finding: dict[str, Any]) -> str:
 
 def _build_jira_create_url(
     jira_config: JiraRuntimeConfig,
-    create_template: dict[str, str] | None,
+    create_template: dict[str, Any] | None,
     finding: dict[str, Any],
 ) -> str | None:
     if not create_template:
-        return None
-    params = {
-        "pid": create_template["pid"],
-        "issuetype": create_template["issuetype"],
-        "summary": _jira_create_summary(finding),
-        "description": _jira_create_description(finding),
-        os.environ.get("JIRA_SECURITY_ACCEPTANCE_CRITERIA_FIELD", DEFAULT_JIRA_ACCEPTANCE_CRITERIA_FIELD): (
-            _jira_create_acceptance_criteria(finding)
-        ),
-        os.environ.get("JIRA_SECURITY_DEPENDENCY_POSSIBILITIES_FIELD", DEFAULT_JIRA_DEPENDENCY_POSSIBILITIES_FIELD): (
-            os.environ.get("JIRA_SECURITY_DEPENDENCY_OTHER_OPTION", DEFAULT_JIRA_DEPENDENCY_OTHER_OPTION)
-        ),
-        os.environ.get("JIRA_SECURITY_REQUIREMENT_CATEGORY_FIELD", DEFAULT_JIRA_REQUIREMENT_CATEGORY_FIELD): (
-            os.environ.get("JIRA_SECURITY_REQUIREMENT_FEATURE_OPTION", DEFAULT_JIRA_REQUIREMENT_FEATURE_OPTION)
-        ),
-        os.environ.get("JIRA_SECURITY_ACTIVITY_TYPE_FIELD", DEFAULT_JIRA_ACTIVITY_TYPE_FIELD): (
-            os.environ.get("JIRA_SECURITY_ACTIVITY_PLANNED_OPTION", DEFAULT_JIRA_ACTIVITY_PLANNED_OPTION)
-        ),
-        os.environ.get("JIRA_SECURITY_PRODUCT_FIELD", DEFAULT_JIRA_PRODUCT_FIELD): (
-            os.environ.get("JIRA_SECURITY_PRODUCT_ACONEX_OPTION", DEFAULT_JIRA_PRODUCT_ACONEX_OPTION)
-        ),
-        os.environ.get("JIRA_SECURITY_EPIC_LINK_FIELD", DEFAULT_JIRA_EPIC_LINK_FIELD): (
-            os.environ.get("JIRA_SECURITY_EPIC_LINK", DEFAULT_JIRA_SECURITY_EPIC_LINK)
-        ),
-        "assignee": "-1",
-    }
+        return _jira_default_create_issue_url(jira_config.base_url, finding)
+    template_params = create_template.get("_templateParams")
+    params: dict[str, JiraCreateParamValue] = {}
+    if isinstance(template_params, dict):
+        for key, value in template_params.items():
+            if isinstance(key, str) and (coerced := _coerce_jira_create_param(value)) is not None:
+                params[key] = coerced
+
+    params.update(
+        {
+            "pid": create_template["pid"],
+            "issuetype": create_template["issuetype"],
+            "summary": _jira_create_summary(finding),
+            "description": _jira_create_description(finding),
+            os.environ.get("JIRA_SECURITY_ACCEPTANCE_CRITERIA_FIELD", DEFAULT_JIRA_ACCEPTANCE_CRITERIA_FIELD): (
+                _jira_create_acceptance_criteria(finding)
+            ),
+            "assignee": "-1",
+        }
+    )
     sprint_id = create_template.get("_activeSprintId")
     if sprint_id:
         params[os.environ.get("JIRA_SECURITY_SPRINT_FIELD", DEFAULT_JIRA_SPRINT_FIELD)] = sprint_id

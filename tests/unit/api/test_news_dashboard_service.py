@@ -43,6 +43,7 @@ class NewsDashboardServiceTests(unittest.TestCase):
         self.assertNotIn("cricket", categories)
         self.assertGreaterEqual(len(categories["world"]["articles"]), 1)
         self.assertEqual(payload["bookOfTheDay"]["label"], "Book of the Day")
+        self.assertTrue(payload["bookOfTheDay"]["topic"])
         self.assertTrue(payload["bookOfTheDay"]["title"])
         self.assertEqual(payload["bookOfTheDay"]["readingTimeMinutes"], 5)
         self.assertTrue(payload["bookOfTheDay"]["detailedSummary"])
@@ -105,6 +106,18 @@ class NewsDashboardServiceTests(unittest.TestCase):
 
         self.assertEqual(first["title"], repeated["title"])
         self.assertEqual(len(titles), len(set(titles)))
+
+    def test_book_catalog_includes_non_work_topics(self) -> None:
+        catalog = news_dashboard._book_catalog()  # noqa: SLF001
+        topics = {book["topic"] for book in catalog}
+        work_books = [book for book in catalog if book["topic"] == "Work & leadership"]
+
+        self.assertIn("Personal development", topics)
+        self.assertIn("General knowledge", topics)
+        self.assertIn("Travel", topics)
+        self.assertIn("Nature", topics)
+        self.assertGreaterEqual(len(catalog), 20)
+        self.assertLess(len(work_books), len(catalog) / 2)
 
     def test_training_tips_are_daily_ordered_without_dropping_options(self) -> None:
         start = datetime(2026, 6, 1, 1, 0, tzinfo=timezone.utc)

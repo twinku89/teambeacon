@@ -283,6 +283,7 @@ describe("Content", () => {
         ],
         bookOfTheDay: {
           label: "Book of the Day",
+          topic: "Personal development",
           title: "Atomic Habits",
           author: "James Clear",
           summary: "A practical habit-building book.",

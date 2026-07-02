@@ -254,6 +254,7 @@ export type DogTrainingTip = {
 
 export type BookOfTheDay = {
   label: string;
+  topic?: string;
   title: string;
   author: string;
   summary: string;
