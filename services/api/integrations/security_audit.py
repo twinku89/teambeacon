@@ -724,6 +724,23 @@ def _build_vulnerability_jira_jql(vulnerability_id: str, project_key: str | None
     return f"{' AND '.join(clauses)} ORDER BY updated DESC"
 
 
+def _finding_package_identity(finding: dict[str, Any]) -> str | None:
+    package_name = _clean_optional_string(finding.get("packageName"))
+    if not package_name:
+        return None
+
+    normalized_package, _ = _parse_purl(package_name)
+    return (normalized_package or package_name).casefold()
+
+
+def _build_package_jira_jql(package_identity: str, project_key: str | None) -> str:
+    clauses = []
+    if project_key:
+        clauses.append(f"project = {project_key}")
+    clauses.append(f"text ~ {_jql_text_literal(package_identity)}")
+    return f"{' AND '.join(clauses)} ORDER BY updated DESC"
+
+
 def _parse_jira_datetime_value(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
@@ -1164,10 +1181,26 @@ def _find_jira_card_for_vulnerability(
     jira_config: JiraRuntimeConfig,
     vulnerability_id: str,
 ) -> dict[str, Any] | None:
+    return _find_jira_card(connector, jira_config, _build_vulnerability_jira_jql(vulnerability_id, jira_config.project_key))
+
+
+def _find_jira_card_for_package(
+    connector: JiraRestConnector,
+    jira_config: JiraRuntimeConfig,
+    package_identity: str,
+) -> dict[str, Any] | None:
+    return _find_jira_card(connector, jira_config, _build_package_jira_jql(package_identity, jira_config.project_key))
+
+
+def _find_jira_card(
+    connector: JiraRestConnector,
+    jira_config: JiraRuntimeConfig,
+    jql: str,
+) -> dict[str, Any] | None:
     payload = connector._request_json(
         "/rest/api/2/search",
         params={
-            "jql": _build_vulnerability_jira_jql(vulnerability_id, jira_config.project_key),
+            "jql": jql,
             "startAt": 0,
             "maxResults": JIRA_CARD_SEARCH_LIMIT,
             "fields": "summary,status,assignee,comment,updated",
@@ -1232,9 +1265,49 @@ def _attach_jira_cards(findings: list[dict[str, Any]]) -> None:
             except JiraAPIError:
                 cards_by_vulnerability[vulnerability_id] = None
 
+    package_identities = {
+        id(finding): _finding_package_identity(finding)
+        for finding in findings
+    }
+    cards_by_package: dict[str, dict[str, Any]] = {}
     for finding in findings:
+        package_identity = package_identities[id(finding)]
         vulnerability_id = str(finding.get("id") or "").strip()
         jira_card = cards_by_vulnerability.get(vulnerability_id)
+        if package_identity and jira_card is not None:
+            cards_by_package.setdefault(package_identity, jira_card)
+
+    missing_package_identities = sorted(
+        {
+            package_identity
+            for package_identity in package_identities.values()
+            if package_identity and package_identity not in cards_by_package
+        }
+    )
+    if missing_package_identities:
+        with ThreadPoolExecutor(max_workers=min(6, len(missing_package_identities))) as executor:
+            package_card_futures = {
+                package_identity: executor.submit(
+                    _find_jira_card_for_package,
+                    connector,
+                    jira_config,
+                    package_identity,
+                )
+                for package_identity in missing_package_identities
+            }
+            for package_identity, future in package_card_futures.items():
+                try:
+                    jira_card = future.result()
+                except JiraAPIError:
+                    jira_card = None
+                if jira_card is not None:
+                    cards_by_package[package_identity] = jira_card
+
+    for finding in findings:
+        vulnerability_id = str(finding.get("id") or "").strip()
+        jira_card = cards_by_vulnerability.get(vulnerability_id) or cards_by_package.get(
+            package_identities[id(finding)] or ""
+        )
         finding["jiraCard"] = jira_card
         if jira_card is None:
             finding["jiraCreateUrl"] = _build_jira_create_url(jira_config, create_template, finding)

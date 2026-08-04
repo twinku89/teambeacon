@@ -485,6 +485,120 @@ class SecurityAuditServiceUnitTests(unittest.TestCase):
         self.assertIn("summary=Remediate+High+severity+UI+vulnerability+GHSA-ph9p-34f9-6g65", findings[0]["jiraCreateUrl"])
         self.assertIn("assignee=-1", findings[0]["jiraCreateUrl"])
 
+    def test_attach_jira_cards_reuses_package_card_for_related_cves(self) -> None:
+        findings = [
+            {
+                "layer": "Trivy Scan",
+                "id": "CVE-2026-47162",
+                "severity": "HIGH",
+                "packageName": "pkg:rpm/oracle/libpng@1.6.37-12.el9_7.3?arch=x86_64",
+                "installedVersion": "2:1.6.37-12.el9_7.3",
+                "status": "FAILED",
+            },
+            {
+                "layer": "Trivy Scan",
+                "id": "CVE-2026-47167",
+                "severity": "HIGH",
+                "packageName": "pkg:rpm/oracle/libpng@1.6.37-12.el9_7.3?arch=x86_64",
+                "installedVersion": "2:1.6.37-12.el9_7.3",
+                "status": "FAILED",
+            },
+        ]
+        jira_config = JiraRuntimeConfig(
+            base_url="https://jira.example.com",
+            pat_token="jira-token",
+            project_key="SEC",
+            board_id=None,
+            story_points_field="customfield_10016",
+        )
+        jira_issue = {
+            "key": "SEC-471",
+            "fields": {
+                "summary": "Remediate libpng vulnerabilities",
+                "status": {"name": "In Progress", "statusCategory": {"name": "In Progress"}},
+                "assignee": {"displayName": "Security Owner"},
+                "updated": "2026-07-15T10:00:00.000+0000",
+                "comment": {"comments": []},
+            },
+        }
+
+        def fake_jira_request(path: str, params: dict[str, object] | None = None) -> dict[str, object]:
+            if path == "/rest/api/2/issue/REV-5404":
+                return {"fields": {"project": {"id": "19824"}, "issuetype": {"id": "7"}}}
+            if path == "/rest/api/2/search" and params:
+                jql = str(params.get("jql"))
+                if "CVE-2026-47162" in jql:
+                    return {"issues": [jira_issue]}
+                return {"issues": []}
+            return {}
+
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "services.api.integrations.security_audit.JiraRuntimeConfig.from_env",
+            return_value=jira_config,
+        ), patch("services.api.integrations.security_audit.JiraRestConnector") as connector_cls:
+            connector_cls.return_value._request_json.side_effect = fake_jira_request
+
+            security_audit._attach_jira_cards(findings)  # noqa: SLF001
+
+        self.assertEqual(findings[0]["jiraCard"]["issueKey"], "SEC-471")
+        self.assertEqual(findings[1]["jiraCard"]["issueKey"], "SEC-471")
+        self.assertIsNone(findings[0]["jiraCreateUrl"])
+        self.assertIsNone(findings[1]["jiraCreateUrl"])
+
+    def test_attach_jira_cards_finds_existing_card_by_package(self) -> None:
+        findings = [
+            {
+                "layer": "Trivy Scan",
+                "id": "CVE-2026-47167",
+                "severity": "HIGH",
+                "packageName": "pkg:rpm/oracle/libpng@1.6.37-12.el9_7.3?arch=x86_64",
+                "installedVersion": "2:1.6.37-12.el9_7.3",
+                "status": "FAILED",
+            }
+        ]
+        jira_config = JiraRuntimeConfig(
+            base_url="https://jira.example.com",
+            pat_token="jira-token",
+            project_key="SEC",
+            board_id=None,
+            story_points_field="customfield_10016",
+        )
+        jira_issue = {
+            "key": "SEC-471",
+            "fields": {
+                "summary": "Remediate CVE-2026-47162 in libpng",
+                "status": {"name": "To Do", "statusCategory": {"name": "To Do"}},
+                "assignee": None,
+                "updated": "2026-07-15T10:00:00.000+0000",
+                "comment": {"comments": []},
+            },
+        }
+        jira_queries: list[str] = []
+
+        def fake_jira_request(path: str, params: dict[str, object] | None = None) -> dict[str, object]:
+            if path == "/rest/api/2/issue/REV-5404":
+                return {"fields": {"project": {"id": "19824"}, "issuetype": {"id": "7"}}}
+            if path == "/rest/api/2/search" and params:
+                jql = str(params.get("jql"))
+                jira_queries.append(jql)
+                if "oracle/libpng" in jql:
+                    return {"issues": [jira_issue]}
+                return {"issues": []}
+            return {}
+
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "services.api.integrations.security_audit.JiraRuntimeConfig.from_env",
+            return_value=jira_config,
+        ), patch("services.api.integrations.security_audit.JiraRestConnector") as connector_cls:
+            connector_cls.return_value._request_json.side_effect = fake_jira_request
+
+            security_audit._attach_jira_cards(findings)  # noqa: SLF001
+
+        self.assertEqual(findings[0]["jiraCard"]["issueKey"], "SEC-471")
+        self.assertIsNone(findings[0]["jiraCreateUrl"])
+        self.assertTrue(any("CVE-2026-47167" in jql for jql in jira_queries))
+        self.assertTrue(any("oracle/libpng" in jql for jql in jira_queries))
+
     def test_returns_pipeline_layers_and_findings(self) -> None:
         runtime = JenkinsRuntimeConfig(
             job_url="https://jenkins.example.com/job/security-audit/",
